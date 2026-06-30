@@ -1,0 +1,16 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Add pinned system and Python dependencies here.
+# Example:
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     tesseract-ocr poppler-utils \
+#   && rm -rf /var/lib/apt/lists/*
+# COPY requirements.txt /app/requirements.txt
+# RUN pip install --no-cache-dir -r /app/requirements.txt
+
+COPY . /app
+RUN chmod +x /app/run.sh
+
+ENTRYPOINT ["/app/run.sh"]

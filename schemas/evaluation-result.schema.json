@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MIB Doc Challenge Evaluation Result",
+  "type": "object",
+  "required": ["score_version", "score_scale", "counts", "scores", "raw", "confusion"],
+  "properties": {
+    "score_version": { "type": "string" },
+    "score_scale": {
+      "type": "object",
+      "required": [
+        "max_score",
+        "extraction_points",
+        "classification_points",
+        "calibration_points",
+        "missing_penalty_cap"
+      ],
+      "properties": {
+        "max_score": { "type": "number" },
+        "extraction_points": { "type": "number" },
+        "classification_points": { "type": "number" },
+        "calibration_points": { "type": "number" },
+        "missing_penalty_cap": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "counts": { "type": "object" },
+    "scores": {
+      "type": "object",
+      "required": [
+        "total_score",
+        "extraction_score",
+        "classification_score",
+        "calibration_score",
+        "missing_penalty"
+      ],
+      "properties": {
+        "total_score": { "type": "number" },
+        "extraction_score": { "type": "number" },
+        "classification_score": { "type": "number" },
+        "calibration_score": { "type": "number" },
+        "missing_penalty": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "raw": { "type": "object" },
+    "confusion": { "type": "object" },
+    "examples": { "type": "object" }
+  },
+  "additionalProperties": false
+}
