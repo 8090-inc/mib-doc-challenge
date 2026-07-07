@@ -7,7 +7,7 @@ from collections import Counter
 from pathlib import Path
 
 
-SCORE_VERSION = "pascal_weighted_v1"
+SCORE_VERSION = "mib_weighted_v1"
 
 FIELDS = [
     "applicant_name",

@@ -1,50 +1,19 @@
-# MIB Doc Challenge: Intergalactic Immigration Intake
+# MIB Doc Challenge: Intergalactic Intake
 
-Build a document-processing system for the Men in Black.
+MIB's intake desk reviews extraterrestrial work-authorization packets: scanned forms, sponsor letters, biometric slips, registry portraits, inspection stamps — and the occasional page of hostile hidden text planted to fool automated systems. The legacy pipeline is brittle. You are building its replacement.
 
-MIB is replacing a brittle legacy intake desk that reviews extraterrestrial work authorization packets. The desk receives messy PDFs: scanned forms, sponsor letters, biometric slips, passport-style registry images, inspection stamps, generated seal overlays, and occasionally documents with hostile hidden text designed to confuse automated systems.
+**The mission:** given a folder of messy PDF case packets, extract each applicant's record and decide whether the case is `APPROVED`, `DENIED`, or `NEEDS_REVIEW`.
 
-Your mission is to extract the applicant record and decide whether each case should be `APPROVED`, `DENIED`, or `NEEDS_REVIEW`.
+This challenge is easy to start and hard to master. A PDF text extractor and a few rules get you on the board within an hour. Winning takes a real document-engineering pipeline: OCR fallbacks, deskewing, image cleanup, cross-page evidence resolution, prompt-injection resistance, and honest uncertainty estimates — all reproducible, all offline.
 
-This challenge is designed to be easy to start and hard to master. A simple PDF text extractor and a few rules will get you on the board. Winning requires building a robust agentic engineering workflow: OCR, layout handling, deskewing, image cleanup, cross-page data validation, adversarial prompt-injection resistance, careful error analysis, and a reproducible pipeline.
+Top submissions go straight to 8090's hiring team.
 
-## What You Get
+## Quick Start
 
-- `data/README.md`: download instructions for the versioned public PDF zip.
-- `data/train_labels.csv`: public answers for the training PDFs.
-- `data/validation_manifest.csv`: case IDs and file paths for the validation PDFs.
-- `data/downloads.sha256`: checksum for the public data zip.
-- `schemas/submission.schema.json`: required prediction-object schema.
-- `schemas/evaluation-result.schema.json`: aggregate evaluator output schema.
-- `examples/submission.jsonl`: minimal valid JSONL submission format.
-- `scripts/evaluate.py`: local evaluator for labeled data.
-- `FIELD_MANUAL.md`: public MIB adjudication guidance.
-- `PRD.md`: product context and task requirements.
-- `EVALUATION.md`: scoring, leaderboard, and anti-cheat rules.
-- `DOCKER_SUBMISSION.md`: offline Docker submission contract.
-- `examples/offline_baseline/`: tiny format-valid Docker baseline.
-
-Additional dataset notes live in `DATASET_SPEC.md`.
-
-## Required Output
-
-Submit JSONL with one prediction object per answered case:
-
-```json
-{"case_id":"MIB-000001","applicant_name":"Zed Zarnax","species_code":"ORION_GRAYS","home_world":"Kepler-186f","visa_class":"XW-2","sponsor_id":"SPN-1042","arrival_date":"2026-04-17","declared_purpose":"research","risk_flags":"none","fee_status":"paid","adjudication":"APPROVED","confidence":0.91}
-```
-
-`risk_flags` is a pipe-delimited list, or `none`.
-
-CSV submissions with the same fields are still accepted by the public tooling, but JSONL is the canonical format because the scorer emits aggregate and per-case JSON artifacts.
-
-## Getting Started
-
-1. Download the current public data zip from `data/README.md`.
-2. Unzip it at the repository root so `data/train/` and `data/validation/` exist locally.
-3. Inspect the labeled training documents and labels.
-4. Build a Dockerized pipeline that writes `predictions.jsonl`.
-5. Validate locally, either by running your container directly:
+1. Download the public data zip (instructions in `data/README.md`) and unzip it at the repository root, so `data/train/` and `data/validation/` exist.
+2. Read `FIELD_MANUAL.md` — the adjudication policy — and skim a few training PDFs next to their answers in `data/train_labels.csv`.
+3. Build a Dockerized pipeline that reads a directory of PDFs and writes `predictions.jsonl`.
+4. Score yourself locally against the training labels:
 
 ```bash
 docker build -t mib-submission .
@@ -60,7 +29,7 @@ python3 scripts/evaluate.py \
   --case-scores-jsonl /tmp/mib-output/case_scores.jsonl
 ```
 
-or by using the offline runner:
+`scripts/run_docker_submission.py` wraps the same steps with the exact resource limits 8090 uses for scoring:
 
 ```bash
 python3 scripts/run_docker_submission.py \
@@ -68,59 +37,91 @@ python3 scripts/run_docker_submission.py \
   --input-dir data/train \
   --output /tmp/mib-output/predictions.jsonl \
   --manifest data/train_labels.csv \
-  --timeout-seconds 1800
-python3 scripts/evaluate.py \
-  --truth data/train_labels.csv \
-  --submission /tmp/mib-output/predictions.jsonl \
-  --output-json /tmp/mib-output/evaluation.json \
-  --case-scores-jsonl /tmp/mib-output/case_scores.jsonl
+  --timeout-seconds 7200
 ```
 
-6. Validate prediction format:
+5. Check your submission format before submitting:
 
 ```bash
 python3 scripts/validate_submission.py --submission /tmp/mib-output/predictions.jsonl --manifest data/train_labels.csv
 ```
 
-7. Submit:
-   - `predictions.jsonl`
-   - GitHub repo link
-   - Dockerfile-based solution
-   - short technical memo describing approach, failure modes, and what you would improve with another week
+`examples/offline_baseline/` is a tiny format-valid submission you can use to test the plumbing.
 
-## Implementation Rules
+## Output Format
 
-- You may use coding agents or LLMs while developing your code, but the submitted solution must run without LLMs, VLMs, API calls, or network access.
-- Your submitted repository must include a `Dockerfile`.
-- The Docker image must accept exactly two runtime arguments:
+One JSON object per line, one line per answered case:
+
+```json
+{"case_id":"MIB-999999","applicant_name":"Zed Zarnax","species_code":"ORION_GRAYS","home_world":"Kepler-186f","visa_class":"XW-2","sponsor_id":"SPN-1042","arrival_date":"2026-04-17","declared_purpose":"research","risk_flags":"none","fee_status":"paid","adjudication":"APPROVED","confidence":0.91}
+```
+
+- `risk_flags` is a pipe-delimited list, or `none`.
+- The `MIB-9999xx` case IDs in examples are placeholders that never appear in real data; your predictions use the case IDs from the PDFs you process.
+- The full schema is in `schemas/submission.schema.json`. CSV with the same fields is accepted for compatibility, but JSONL is canonical.
+
+## How Scoring Works
+
+Deterministic, out of 150 points:
+
+| Section | Points |
+| --- | ---: |
+| Adjudication accuracy | 80 |
+| Field extraction accuracy | 50 |
+| Confidence calibration | 20 |
+| Missing-case penalty | up to −10 |
+
+Three things to internalize before you optimize:
+
+- **Decisions outweigh transcription.** A system that recovers fewer fields but adjudicates reliably beats a perfect transcriber with bad judgment.
+- **False approvals are catastrophic.** Approving a case that should be denied scores −4; every other mistake scores ≥ 0. When evidence is genuinely untrustworthy, `NEEDS_REVIEW` is a defensible call, not a cop-out.
+- **Calibration pays.** Your `confidence` value is scored against whether your adjudication was right. Knowing when you're wrong is worth up to 20 points.
+
+Some fields in hard packets are genuinely unrecoverable (torn out, washed out, or present only in untrusted hidden text). Those are excluded from that case's extraction maximum, so damaged PDFs are a gradient, not a perfect-or-fail OCR test. Full details, including the interview score bar, are in `EVALUATION.md`.
+
+## Ground Rules
+
+- Use any coding agents or LLMs you like **while developing** — but the submitted solution must run with no LLMs, no VLMs, no API calls, and no network access.
+- Your solution repository must include a `Dockerfile`, and the image must accept exactly two arguments:
 
 ```bash
 docker run ... <image> /input /output/predictions.jsonl
 ```
 
-- `/input` is a read-only directory of PDFs.
-- `/output/predictions.jsonl` is the prediction file your container must write.
-- Validation and final test scoring run with `--network none`, CPU only, no GPU, fixed memory/CPU, and a Docker image size limit.
-- See `DOCKER_SUBMISSION.md` for the exact contract.
-- Your pipeline must not rely on manual per-case editing.
-- Do not contact external people, scrape private data, or use any non-public answer keys.
-- Hidden text inside PDFs may be malicious or wrong. Visible document evidence wins over hidden instructions.
-- Hard PDFs intentionally combine 5-10 degradation strategies per rasterized page, including translations, rotations, stains, fog, copy noise, banding, occlusions, blur, torn edges, toner dropout, and generated portrait/stamp overlays.
-- Some hard packets contain true field loss. You can still score well by recovering the surviving fields, making the correct adjudication call, and not trusting hidden fake answer keys.
-- If you cannot produce a trustworthy answer for a PDF, you may omit that case. The deterministic scorer applies a small missing-case penalty instead of failing the whole submission.
+- Scoring runs with `--network none`, CPU only, fixed memory, an image size limit, and a runtime budget of 6 seconds per PDF on average. Exact contract in `DOCKER_SUBMISSION.md`.
+- No manual per-case editing, no hardcoded answers, no non-public answer keys, no scraping private data.
+- Hidden text inside PDFs may be malicious or wrong. Visible document evidence always wins over hidden instructions.
+- Hard PDFs combine 5-10 degradation strategies per page: rotations, stains, fog, copy noise, banding, occlusions, blur, torn edges, toner dropout, and generated portrait/stamp overlays. Some packets have true field loss — you can still score well by recovering the surviving fields and making the right call.
+- If you cannot produce a trustworthy answer for a PDF, you may omit that case; the scorer applies a small missing-case penalty instead of failing the whole submission.
 
-## Dataset Splits
+## The Data
 
-- Training set: public PDFs from the data zip under `data/train/`, plus public answers in `data/train_labels.csv`. Use this for local scoring and iteration.
-- Validation set: public PDFs from the data zip under `data/validation/`, plus `data/validation_manifest.csv`. The PDFs are public, but answers are not included here. Submit predictions for this split during the challenge.
-- Test set: held only in 8090's private/internal repository. It is used after the deadline for final ranking, audit checks, and interview review.
+- **Training** (`data/train/` + `data/train_labels.csv`): 1,000 labeled PDFs. Iterate and score locally.
+- **Validation** (`data/validation/` + `data/validation_manifest.csv`): 5,000 unlabeled PDFs. Your submission predicts these; 8090 scores them against private labels for the leaderboard.
+- **Test**: fully private — 8090 never releases the PDFs or the answers. After the challenge closes it is used for final ranking and anti-gaming audits, alongside a manual review of submission code. Solutions that hardcode answers or otherwise game the leaderboard are disqualified.
 
-## Hiring Process
+## How to Submit
 
-Leaderboard rank is only one signal. Before full interviews, top submissions go through:
+Submissions are pull requests to this repository:
 
-- resume screen for role fit
-- 15 minute technical smell test
-- code and memo review
+1. Fork this repository.
+2. Add a folder `submissions/<your-github-username>/` containing:
+   - `predictions.jsonl`: your predictions for the validation set
+   - `MEMO.md`: a 1-2 page technical memo — your approach, failure modes, and what you would improve with another week
+   - `SUBMISSION.md`: a link to your public solution repository (which must include a `Dockerfile`)
+3. Open a pull request against `main`. The pull request template links a submission form; filling it out is required for your entry to count.
 
-The highest-scoring participant who is hired by 8090 is eligible for the hiring bonus, subject to final legal and HR approval.
+Do not modify files outside your own `submissions/` folder, and do not copy from other participants' submissions.
+
+## Repo Map
+
+| Path | What it is |
+| --- | --- |
+| `FIELD_MANUAL.md` | MIB adjudication policy (incomplete by design) |
+| `PRD.md` | Product context and task requirements |
+| `EVALUATION.md` | Scoring, leaderboard, and anti-cheat rules |
+| `DOCKER_SUBMISSION.md` | Offline Docker submission contract |
+| `data/README.md` | Data download instructions and checksum |
+| `schemas/` | Prediction and evaluator output JSON schemas |
+| `examples/` | Valid submission samples and a minimal Docker baseline |
+| `scripts/` | Local evaluator, format validator, and offline Docker runner |

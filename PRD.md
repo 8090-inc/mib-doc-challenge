@@ -2,7 +2,7 @@
 
 ## Business Problem
 
-The Men in Black operate an intergalactic immigration intake desk for extraterrestrial visitors seeking temporary work authorization on Earth. The current intake process is slow, inconsistent, and vulnerable to bad automation. Each case arrives as a PDF packet assembled from scanned forms, legacy system printouts, inspection stamps, sponsor letters, and manual annotations.
+MIB operates an intergalactic intake desk for extraterrestrial visitors seeking temporary work authorization on Earth. The current intake process is slow, inconsistent, and vulnerable to bad automation. Each case arrives as a PDF packet assembled from scanned forms, legacy system printouts, inspection stamps, sponsor letters, and manual annotations.
 
 MIB wants a replacement pipeline that can read those packets, produce a structured applicant record, and make an initial adjudication recommendation. The system does not need to be perfect, but it must be robust enough to handle messy real-world documents and adversarial content.
 

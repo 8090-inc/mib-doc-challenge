@@ -64,8 +64,9 @@ python3 scripts/run_docker_submission.py \
 - Docker image size: max 4 GiB uncompressed, measured by `docker image inspect`.
 - Individual model artifact: max 250 MiB.
 - Total model artifacts: max 1 GiB.
-- Runtime: validation-set target under 2 hours on 4 vCPU / 8 GiB RAM.
-- Runtime: private test-set target under 20 minutes on 4 vCPU / 8 GiB RAM.
+- Runtime budget: 6 seconds per PDF on average, on 4 vCPU / 8 GiB RAM. OCR-heavy pipelines should parallelize across the 4 vCPUs to stay inside it.
+- Runtime hard limit: 8 hours for the 5,000-PDF validation set. Containers still running at the limit are stopped and scored on whatever output exists.
+- The private test set is scored with the same 6-seconds-per-PDF budget.
 - Output predictions file: max 25 MiB.
 - No GPU.
 - No network access.
