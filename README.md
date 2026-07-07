@@ -1,6 +1,6 @@
 # MIB Doc Challenge: Intergalactic Immigration Intake
 
-Build a document-processing system for the Men in Black.
+Build a document-processing system for MIB.
 
 MIB is replacing a brittle legacy intake desk that reviews extraterrestrial work authorization packets. The desk receives messy PDFs: scanned forms, sponsor letters, biometric slips, passport-style registry images, inspection stamps, generated seal overlays, and occasionally documents with hostile hidden text designed to confuse automated systems.
 
@@ -24,15 +24,15 @@ This challenge is designed to be easy to start and hard to master. A simple PDF 
 - `DOCKER_SUBMISSION.md`: offline Docker submission contract.
 - `examples/offline_baseline/`: tiny format-valid Docker baseline.
 
-Additional dataset notes live in `DATASET_SPEC.md`.
-
 ## Required Output
 
 Submit JSONL with one prediction object per answered case:
 
 ```json
-{"case_id":"MIB-000001","applicant_name":"Zed Zarnax","species_code":"ORION_GRAYS","home_world":"Kepler-186f","visa_class":"XW-2","sponsor_id":"SPN-1042","arrival_date":"2026-04-17","declared_purpose":"research","risk_flags":"none","fee_status":"paid","adjudication":"APPROVED","confidence":0.91}
+{"case_id":"MIB-999999","applicant_name":"Zed Zarnax","species_code":"ORION_GRAYS","home_world":"Kepler-186f","visa_class":"XW-2","sponsor_id":"SPN-1042","arrival_date":"2026-04-17","declared_purpose":"research","risk_flags":"none","fee_status":"paid","adjudication":"APPROVED","confidence":0.91}
 ```
+
+The `MIB-9999xx` case IDs in examples are placeholders that never appear in real data; your predictions use the case IDs from the PDFs you process.
 
 `risk_flags` is a pipe-delimited list, or `none`.
 
@@ -68,7 +68,7 @@ python3 scripts/run_docker_submission.py \
   --input-dir data/train \
   --output /tmp/mib-output/predictions.jsonl \
   --manifest data/train_labels.csv \
-  --timeout-seconds 1800
+  --timeout-seconds 7200
 python3 scripts/evaluate.py \
   --truth data/train_labels.csv \
   --submission /tmp/mib-output/predictions.jsonl \
@@ -82,11 +82,20 @@ python3 scripts/evaluate.py \
 python3 scripts/validate_submission.py --submission /tmp/mib-output/predictions.jsonl --manifest data/train_labels.csv
 ```
 
-7. Submit:
-   - `predictions.jsonl`
-   - GitHub repo link
-   - Dockerfile-based solution
-   - short technical memo describing approach, failure modes, and what you would improve with another week
+7. Submit via pull request. See "How to Submit" below.
+
+## How to Submit
+
+Submissions are pull requests to this repository:
+
+1. Fork this repository.
+2. Add a folder `submissions/<your-github-username>/` containing:
+   - `predictions.jsonl`: your predictions for the validation set
+   - `MEMO.md`: a 1-2 page technical memo describing your approach, failure modes, and what you would improve with another week
+   - `SUBMISSION.md`: a link to your public solution repository (which must include a `Dockerfile`)
+3. Open a pull request against `main`. The pull request template includes a submission form link; filling it out is required for your entry to count.
+
+Do not modify files outside your own `submissions/` folder, and do not copy from other participants' submissions.
 
 ## Implementation Rules
 
@@ -113,7 +122,7 @@ docker run ... <image> /input /output/predictions.jsonl
 
 - Training set: public PDFs from the data zip under `data/train/`, plus public answers in `data/train_labels.csv`. Use this for local scoring and iteration.
 - Validation set: public PDFs from the data zip under `data/validation/`, plus `data/validation_manifest.csv`. The PDFs are public, but answers are not included here. Submit predictions for this split during the challenge.
-- Test set: held only in 8090's private/internal repository. It is used after the deadline for final ranking, audit checks, and interview review.
+- Test set: held only in 8090's private/internal repository. Both its PDFs and its expected outputs are private. It is used after the challenge closes for final ranking, anti-gaming audits, and interview review, and 8090 also reviews submission code by hand. Solutions that hardcode answers or otherwise game the leaderboard are disqualified.
 
 ## Hiring Process
 
@@ -122,5 +131,3 @@ Leaderboard rank is only one signal. Before full interviews, top submissions go 
 - resume screen for role fit
 - 15 minute technical smell test
 - code and memo review
-
-The highest-scoring participant who is hired by 8090 is eligible for the hiring bonus, subject to final legal and HR approval.

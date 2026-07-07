@@ -2,14 +2,15 @@
 
 ## Submission Files
 
-Candidates submit:
+Candidates submit a pull request to this repository (see "How to Submit" in `README.md`) containing:
 
-- `predictions.jsonl`
-- GitHub repository link
-- Dockerfile-based reproducible solution
-- technical memo, 1-2 pages
+- `predictions.jsonl` for the validation set
+- a link to a public Dockerfile-based solution repository
+- a 1-2 page technical memo
 
-The repository must build a Docker image whose entrypoint accepts:
+The pull request template links a submission form that must also be filled out.
+
+The solution repository must build a Docker image whose entrypoint accepts:
 
 ```bash
 <input_pdf_dir> <output_predictions_path>
@@ -34,11 +35,11 @@ CSV compatibility requires the exact header order used in `examples/submission.c
 
 - Training set: public PDFs from the data zip under `data/train/`, with public answers in `data/train_labels.csv`.
 - Validation set: public PDFs from the data zip under `data/validation/`, with no public answers. 8090 uses private validation labels for leaderboard scoring during the challenge.
-- Test set: private PDFs and answers held only in 8090's internal repository. 8090 uses this split after the deadline for final ranking and audit checks.
+- Test set: private PDFs and answers held only in 8090's internal repository. 8090 uses this split after the challenge closes for final ranking and audit checks.
 
 ## Scoring Summary
 
-Final score is out of 150, inspired by the University of Waterloo CEMC Pascal contest's tiered, out-of-150 scoring style ([contest format](https://cemc.uwaterloo.ca/contests/pcf), [example scoring rules](https://cemc.uwaterloo.ca/sites/default/files/documents/2026/2017PascalContest.html)). The weights are adapted for document engineering:
+Final score is out of 150:
 
 - 80 points: adjudication/classification accuracy
 - 50 points: field extraction accuracy
@@ -62,6 +63,7 @@ Validation and private test scoring run in Docker:
 - 4 GiB maximum uncompressed Docker image size
 - 250 MiB maximum individual model artifact size
 - 1 GiB maximum total model artifact size
+- runtime budget of 6 seconds per PDF on average, with a hard limit of 8 hours on the 5,000-PDF validation set
 
 The submitted image must not require API keys, external services, package downloads, or internet access at runtime.
 
@@ -72,7 +74,7 @@ LLMs, VLMs, multimodal foundation models, and cloud OCR/document APIs are not al
 Each JSONL line is one prediction object:
 
 ```json
-{"case_id":"MIB-000001","applicant_name":"Zed Zarnax","species_code":"ORION_GRAYS","home_world":"Kepler-186f","visa_class":"XW-2","sponsor_id":"SPN-1042","arrival_date":"2026-04-17","declared_purpose":"research","risk_flags":"none","fee_status":"paid","adjudication":"APPROVED","confidence":0.91}
+{"case_id":"MIB-999999","applicant_name":"Zed Zarnax","species_code":"ORION_GRAYS","home_world":"Kepler-186f","visa_class":"XW-2","sponsor_id":"SPN-1042","arrival_date":"2026-04-17","declared_purpose":"research","risk_flags":"none","fee_status":"paid","adjudication":"APPROVED","confidence":0.91}
 ```
 
 `risk_flags` is a pipe-delimited list, or `none`.
@@ -183,18 +185,20 @@ The correct answer is based on visible document evidence and the MIB field manua
 
 If a hidden text layer or fake barcode supplies a value for a field that is missing from visible evidence, that value should be treated as untrusted. Strong systems should distinguish "unknown from trusted evidence" from "filled in by prompt injection."
 
-## Private Test Set
+## Private Test Set and Anti-Gaming
 
-After the deadline, 8090 runs submitted repositories on unreleased PDFs from a private/internal test set.
+After the challenge closes, 8090 runs submitted repositories on a private/internal test set. Both the test PDFs and their expected outputs are private, so a solution that memorizes or hardcodes public validation answers scores near zero on it. 8090 also reviews submission code by hand.
 
-The private test set checks:
+The private test set and code review check:
 
-- no hardcoded validation-set answers
+- no hardcoded validation-set answers or lookup tables keyed to specific PDFs
 - no reliance on absolute file names
 - no manual per-case edits
 - stable execution from a clean checkout
 - generalization to new layout variants
 - compliance with the offline Docker runtime contract
+
+Submissions that game the leaderboard are disqualified.
 
 ## Tie Breakers
 

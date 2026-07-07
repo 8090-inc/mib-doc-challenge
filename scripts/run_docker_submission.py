@@ -73,7 +73,7 @@ def main():
     parser.add_argument("--manifest", help="Optional manifest used to validate output case ids.")
     parser.add_argument("--image-tag", default=None)
     parser.add_argument("--skip-build", action="store_true")
-    parser.add_argument("--timeout-seconds", type=int, default=7200)
+    parser.add_argument("--timeout-seconds", type=int, default=28800)
     parser.add_argument("--cpus", default="4")
     parser.add_argument("--memory", default="8g")
     parser.add_argument("--max-image-gib", type=float, default=4.0)
