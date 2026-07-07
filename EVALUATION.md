@@ -46,7 +46,7 @@ Final score is out of 150:
 - 20 points: confidence calibration quality
 - up to -10 points: missing-case penalty
 
-Classification is deliberately worth more than extraction. A system that transcribes fields but makes bad immigration decisions should not beat a system that recovers fewer fields but reliably chooses `APPROVED`, `DENIED`, or `NEEDS_REVIEW` from trusted evidence.
+Classification is deliberately worth more than extraction. A system that transcribes fields but makes bad intake decisions should not beat a system that recovers fewer fields but reliably chooses `APPROVED`, `DENIED`, or `NEEDS_REVIEW` from trusted evidence.
 
 ## Runtime Environment
 

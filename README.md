@@ -1,4 +1,4 @@
-# MIB Doc Challenge: Intergalactic Immigration Intake
+# MIB Doc Challenge: Intergalactic Intake
 
 MIB's intake desk reviews extraterrestrial work-authorization packets: scanned forms, sponsor letters, biometric slips, registry portraits, inspection stamps — and the occasional page of hostile hidden text planted to fool automated systems. The legacy pipeline is brittle. You are building its replacement.
 
