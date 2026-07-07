@@ -1,6 +1,6 @@
 # MIB Doc Challenge: Intergalactic Intake
 
-MIB's intake desk reviews extraterrestrial work-authorization packets: scanned forms, sponsor letters, biometric slips, registry portraits, inspection stamps — and the occasional page of hostile hidden text planted to fool automated systems. The legacy pipeline is brittle. You are building its replacement.
+MIB's intake desk reviews extraterrestrial work-authorization packets: scanned forms, sponsor letters, biometric slips, registry portraits, inspection stamps. The legacy pipeline is brittle and needs a high degree of human review. You are building its replacement.
 
 **The mission:** given a folder of messy PDF case packets, extract each applicant's record and decide whether the case is `APPROVED`, `DENIED`, or `NEEDS_REVIEW`.
 
