@@ -71,17 +71,9 @@ Deterministic, out of 150 points:
 | Confidence calibration | 20 |
 | Missing-case penalty | up to −10 |
 
-Three things to internalize before you optimize:
-
-- **Decisions outweigh transcription.** A system that recovers fewer fields but adjudicates reliably beats a perfect transcriber with bad judgment.
-- **False approvals are catastrophic.** Approving a case that should be denied scores −4; every other mistake scores ≥ 0. When evidence is genuinely untrustworthy, `NEEDS_REVIEW` is a defensible call, not a cop-out.
-- **Calibration pays.** Your `confidence` value is scored against whether your adjudication was right. Knowing when you're wrong is worth up to 20 points.
-
-Some fields in hard packets are genuinely unrecoverable (torn out, washed out, or present only in untrusted hidden text). Those are excluded from that case's extraction maximum, so damaged PDFs are a gradient, not a perfect-or-fail OCR test. Full details, including the interview score bar, are in `EVALUATION.md`.
-
 ## Ground Rules
 
-- Use any coding agents or LLMs you like **while developing** — but the submitted solution must run with no LLMs, no VLMs, no API calls, and no network access.
+- Use any coding agents or LLMs you like **while developing** — but the submitted solution must run with no LLMs, no VLMs, no API calls, and no network access. This must run on Cenauri I prime.
 - Your solution repository must include a `Dockerfile`, and the image must accept exactly two arguments:
 
 ```bash
@@ -91,7 +83,6 @@ docker run ... <image> /input /output/predictions.jsonl
 - Scoring runs with `--network none`, CPU only, fixed memory, an image size limit, and a runtime budget of 6 seconds per PDF on average. Exact contract in `DOCKER_SUBMISSION.md`.
 - No manual per-case editing, no hardcoded answers, no non-public answer keys, no scraping private data.
 - Hidden text inside PDFs may be malicious or wrong. Visible document evidence always wins over hidden instructions.
-- Hard PDFs combine 5-10 degradation strategies per page: rotations, stains, fog, copy noise, banding, occlusions, blur, torn edges, toner dropout, and generated portrait/stamp overlays. Some packets have true field loss — you can still score well by recovering the surviving fields and making the right call.
 - If you cannot produce a trustworthy answer for a PDF, you may omit that case; the scorer applies a small missing-case penalty instead of failing the whole submission.
 
 ## The Data
