@@ -6,7 +6,7 @@ MIB's intake desk reviews extraterrestrial work-authorization packets: scanned f
 
 This challenge is easy to start and hard to master. A PDF text extractor and a few rules get you on the board within an hour. Winning takes a real document-engineering pipeline: OCR fallbacks, deskewing, image cleanup, cross-page evidence resolution, prompt-injection resistance, and honest uncertainty estimates — all reproducible, all offline.
 
-Top submissions go straight to 8090's hiring team. See [What Happens Next](#what-happens-next).
+Top submissions go straight to 8090's hiring team.
 
 ## Quick Start
 
@@ -112,16 +112,6 @@ Submissions are pull requests to this repository:
 3. Open a pull request against `main`. The pull request template links a submission form; filling it out is required for your entry to count.
 
 Do not modify files outside your own `submissions/` folder, and do not copy from other participants' submissions.
-
-## What Happens Next
-
-Leaderboard rank is one signal, not the whole story. Before full interviews, top submissions go through:
-
-- resume screen for role fit
-- 15 minute technical smell test
-- code and memo review
-
-A thoughtful memo and clean, reproducible code can advance a submission that isn't at the top of the leaderboard.
 
 ## Repo Map
 
