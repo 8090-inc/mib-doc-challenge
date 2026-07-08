@@ -1,30 +1,34 @@
 """Entry point: process a directory of PDF case packets into predictions.
 
 Usage: python3 -m mib_pipeline.cli <input_pdf_dir> <output_predictions_path>
+
+Two-phase flow:
+  1. Extract every packet in parallel (4 workers), producing per-case
+     evidence + a provisional decision.
+  2. Finalize decisions batch-wide (staleness needs a batch receipt clock
+     when a packet carries no receipt date) and write once, atomically.
 """
 
+import os
 import sys
 import time
+from multiprocessing import Pool
 from pathlib import Path
 
 from . import writer
 
-
-def predict_case(pdf_path: Path) -> dict:
-    """Produce a prediction for one PDF. (Extraction stages plug in here.)"""
-    from .pipeline import process_pdf  # local import: keep CLI import cheap
-    return process_pdf(pdf_path)
+WORKERS = min(4, os.cpu_count() or 1)
 
 
-def fallback_row(pdf_path: Path) -> dict:
-    """Schema-valid hedge when processing fails entirely."""
-    return {
-        "case_id": pdf_path.stem,
-        "adjudication": "NEEDS_REVIEW",
-        "confidence": 0.3,
-        "risk_flags": "none",
-        "fee_status": "unknown",
-    }
+def _extract_one(pdf_path_str: str) -> dict:
+    from .pipeline import extract_case
+    pdf_path = Path(pdf_path_str)
+    try:
+        return extract_case(pdf_path)
+    except Exception as exc:
+        print(f"[mib] {pdf_path.name}: {type(exc).__name__}: {exc}",
+              file=sys.stderr, flush=True)
+        return {"case_id": pdf_path.stem, "error": str(exc)}
 
 
 def main(argv=None) -> int:
@@ -34,24 +38,33 @@ def main(argv=None) -> int:
               file=sys.stderr)
         return 2
     input_dir, output_path = Path(argv[0]), argv[1]
-    pdfs = sorted(input_dir.glob("*.pdf"))
-    print(f"[mib] {len(pdfs)} PDFs in {input_dir}", flush=True)
+    pdfs = sorted(str(p) for p in input_dir.glob("*.pdf"))
+    print(f"[mib] {len(pdfs)} PDFs in {input_dir}, {WORKERS} workers", flush=True)
 
-    rows = []
+    from .pipeline import finalize_case
+
     start = time.monotonic()
-    for i, pdf in enumerate(pdfs):
-        try:
-            rows.append(predict_case(pdf))
-        except Exception as exc:  # never lose a case to one bad PDF
-            print(f"[mib] {pdf.name}: {type(exc).__name__}: {exc}", file=sys.stderr)
-            rows.append(fallback_row(pdf))
-        if (i + 1) % 100 == 0:
-            writer.write_jsonl(output_path, rows)  # checkpoint (atomic)
-            pace = (time.monotonic() - start) / (i + 1)
-            print(f"[mib] {i+1}/{len(pdfs)} pace={pace:.2f}s/pdf", flush=True)
+    extracted = []
+    if len(pdfs) <= 2 or WORKERS == 1:
+        for p in pdfs:
+            extracted.append(_extract_one(p))
+    else:
+        with Pool(processes=WORKERS, maxtasksperchild=50) as pool:
+            for i, case in enumerate(pool.imap_unordered(_extract_one, pdfs)):
+                extracted.append(case)
+                if (i + 1) % 100 == 0:
+                    pace = (time.monotonic() - start) / (i + 1)
+                    print(f"[mib] extracted {i+1}/{len(pdfs)} pace={pace:.2f}s/pdf",
+                          flush=True)
+                    # Checkpoint provisional rows in case of a hard kill.
+                    rows = [finalize_case(c, extracted) for c in extracted]
+                    writer.write_jsonl(output_path, rows)
 
+    rows = [finalize_case(case, extracted) for case in extracted]
     writer.write_jsonl(output_path, rows)
-    print(f"[mib] wrote {len(rows)} predictions to {output_path}", flush=True)
+    pace = (time.monotonic() - start) / max(1, len(pdfs))
+    print(f"[mib] wrote {len(rows)} predictions to {output_path} "
+          f"({pace:.2f}s/pdf)", flush=True)
     return 0
 
 

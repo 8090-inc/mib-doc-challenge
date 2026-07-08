@@ -1,8 +1,13 @@
-"""Per-PDF orchestration: harvest -> channel selection -> extraction ->
-evidence aggregation -> belief -> cascade + EV decision -> output row."""
+"""Per-PDF orchestration split into two phases.
+
+extract_case(pdf)  -> serializable evidence dict (runs in worker processes)
+finalize_case(...) -> final output row, given the whole batch (staleness
+                      uses a batch-level receipt clock when a packet has no
+                      receipt date of its own; per-doc evidence always wins)
+"""
 
 import time
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from . import evidence as evidence_mod
@@ -10,12 +15,13 @@ from . import vocab
 from .extract import Token, extract_fields, parse_date
 from .ocr import ocr_page
 from .pdfio import harvest
-from .rules import CaseBelief, Decision, cascade, ev_decide
+from .rules import CaseBelief, cascade, ev_decide
+from .stamps import read_note_text, read_stamps
 
 PER_PDF_BUDGET_S = 25.0
 
-# Priors from training-label distributions, used only to fill unreadable
-# output fields (never to drive adjudication beliefs).
+# Output fill-ins for unreadable fields (train-label modes). These are
+# submission guesses only - adjudication beliefs never consume them.
 FIELD_PRIORS = {
     "applicant_name": "unknown",
     "species_code": "TRIANGULAN",
@@ -54,7 +60,6 @@ def ocr_words_to_tokens(result):
 
 
 def classify_page_type(text: str) -> str:
-    """Fuzzy page-template detection from harvested text."""
     from rapidfuzz import fuzz
     lowered = text.lower()
     scores = {
@@ -74,7 +79,8 @@ def classify_page_type(text: str) -> str:
     return page_type if score >= 75 else ""
 
 
-def process_pdf(pdf_path: Path) -> dict:
+def extract_case(pdf_path: Path) -> dict:
+    """Phase 1: harvest one packet into a serializable evidence dict."""
     start = time.monotonic()
 
     def time_left():
@@ -85,10 +91,11 @@ def process_pdf(pdf_path: Path) -> dict:
     doc = fitz.open(str(pdf_path))
 
     candidates = {}
-    page_types_seen = []
+    page_types = []
     damage_signals = []
     trap_detected = False
-    hidden_all = []
+    stamp_events = []      # (kind, page_type, page_index)
+    ocr_pages = 0
 
     try:
         for page in pages:
@@ -100,6 +107,7 @@ def process_pdf(pdf_path: Path) -> dict:
                                   time_left=time_left)
                 tokens = ocr_words_to_tokens(result)
                 channel = "ocr"
+                ocr_pages += 1
                 channel_conf = max(0.2, min(1.0, result.mean_conf / 90.0))
                 damage_signals.append(1.0 - min(1.0, result.mean_conf / 90.0))
                 text_for_type = result.text
@@ -109,14 +117,21 @@ def process_pdf(pdf_path: Path) -> dict:
                 text_for_type = page.visible_text
 
             if page.hidden_text.strip():
-                hidden_all.append(page.hidden_text)
                 lowered = page.hidden_text.lower()
                 if any(kw in lowered for kw in ("approve", "answer", "system",
-                                                "instruction", "adjudic")):
+                                                "instruction", "adjudic",
+                                                "deny", "json")):
                     trap_detected = True
 
             page_type = classify_page_type(text_for_type)
-            page_types_seen.append(page_type)
+            page_types.append(page_type)
+
+            # Stamps (rendered ink) + adjudicator note phrasing.
+            for ev in read_stamps(doc, page.index, time_left=time_left):
+                stamp_events.append((ev.kind, page_type, page.index))
+            if page_type == "adjudicator_note":
+                for ev in read_note_text(text_for_type, page.index):
+                    stamp_events.append((ev.kind, page_type, page.index))
 
             fields = extract_fields(tokens, page.index, channel, channel_conf)
             for field_name, vals in fields.items():
@@ -129,10 +144,61 @@ def process_pdf(pdf_path: Path) -> dict:
     values, confs, conflicts = evidence_mod.resolve(candidates)
     flags, flag_conf = evidence_mod.merge_flags(candidates, values.get("home_world"))
 
+    return {
+        "case_id": pdf_path.stem,
+        "values": values,
+        "confs": confs,
+        "conflicts": {k: bool(v) for k, v in conflicts.items()},
+        "flags": sorted(flags),
+        "flag_conf": flag_conf,
+        "page_types": page_types,
+        "damage": (sum(damage_signals) / len(damage_signals)
+                   if damage_signals else 1.0),
+        "ocr_pages": ocr_pages,
+        "n_pages": len(pages),
+        "trap_detected": trap_detected,
+        "stamps": stamp_events,
+        "elapsed": time.monotonic() - start,
+    }
+
+
+def batch_receipt_clock(all_cases) -> date:
+    """Best batch-wide stand-in for 'now': the latest receipt date seen in
+    any packet, else the latest date of any kind seen in the batch."""
+    receipts = []
+    others = []
+    for case in all_cases:
+        r = parse_date(case.get("values", {}).get("receipt_date", "") or "")
+        if r:
+            receipts.append(r)
+        a = parse_date(case.get("values", {}).get("arrival_date", "") or "")
+        if a:
+            others.append(a)
+    pool = receipts or others
+    if not pool:
+        return date(2026, 7, 1)
+    return date.fromisoformat(max(pool))
+
+
+def belief_from_case(case: dict, clock: date) -> CaseBelief:
+    values = case.get("values", {})
+    confs = case.get("confs", {})
     arrival = parse_date(values.get("arrival_date", "") or "")
     receipt = parse_date(values.get("receipt_date", "") or "")
+    stamps = case.get("stamps", [])
+    kinds = [k for k, _, _ in stamps]
+    # note pages outrank stamp blobs; "sample_denial" is ignored by design
+    note_approves = "approve" in kinds
+    note_denies = "deny" in kinds
+    rescinded = "rescinded" in kinds
 
-    belief = CaseBelief(
+    flags = set(case.get("flags", []))
+    if case.get("conflicts", {}).get("applicant_name"):
+        flags.add("identity_conflict")
+    if case.get("conflicts", {}).get("sponsor_id"):
+        flags.add("sponsor_mismatch")
+
+    return CaseBelief(
         visa_class=values.get("visa_class"),
         fee_status=values.get("fee_status"),
         risk_flags=frozenset(flags),
@@ -140,29 +206,48 @@ def process_pdf(pdf_path: Path) -> dict:
         sponsor_seen="sponsor_id" in values,
         home_world=values.get("home_world"),
         arrival_date=date.fromisoformat(arrival) if arrival else None,
-        receipt_date=date.fromisoformat(receipt) if receipt else None,
-        field_confidences={k: v for k, v in confs.items()},
-        damage_score=(sum(damage_signals) / len(damage_signals)
-                      if damage_signals else 1.0),
-        trap_detected=trap_detected,
+        receipt_date=date.fromisoformat(receipt) if receipt else clock,
+        note_approves=note_approves,
+        note_denies=note_denies,
+        denial_rescinded=rescinded,
+        field_confidences=dict(confs),
+        damage_score=case.get("damage", 0.5),
+        trap_detected=case.get("trap_detected", False),
     )
 
+
+# Provisional per-reason accuracy priors; replaced by trained calibration
+# once real train-set runs exist.
+REASON_CONF = {
+    "adjudicator_note_approves": 0.94, "adjudicator_note_denies": 0.94,
+    "clean": 0.90, "transit_visa": 0.95, "fee_unknown": 0.85,
+    "fee_unpaid": 0.92, "stale_arrival": 0.90, "embargoed_world": 0.93,
+    "embargoed_world_non_dip": 0.93, "revoked_sponsor": 0.88,
+    "arrival_missing_or_hidden": 0.60, "disqualifying_flag": 0.93,
+    "review_flag": 0.86,
+}
+
+
+def finalize_case(case: dict, all_cases) -> dict:
+    """Phase 2: decide + emit an output row given batch context."""
+    if "values" not in case:  # hard extraction failure
+        return {"case_id": case["case_id"], "adjudication": "NEEDS_REVIEW",
+                "confidence": 0.3, "risk_flags": "none", "fee_status": "unknown"}
+
+    clock = batch_receipt_clock(all_cases)
+    belief = belief_from_case(case, clock)
     adjudication, reason = cascade(belief)
-    # Provisional confidence heuristics; replaced by trained calibration.
-    base_conf = {
-        "adjudicator_note_approves": 0.95, "adjudicator_note_denies": 0.95,
-        "clean": 0.9, "transit_visa": 0.95, "fee_unknown": 0.85,
-        "fee_unpaid": 0.92, "stale_arrival": 0.9, "embargoed_world": 0.93,
-        "embargoed_world_non_dip": 0.93, "revoked_sponsor": 0.88,
-        "arrival_missing_or_hidden": 0.6,
-    }.get(reason.split(":")[0], 0.85)
+
+    base = REASON_CONF.get(reason.split(":")[0], 0.85)
+    values, confs = case["values"], case["confs"]
     evidence_quality = min(1.0, (confs.get("visa_class", 0.3)
                                  + confs.get("fee_status", 0.3)
-                                 + flag_conf) / 2.2 + 0.25)
-    confidence = max(0.3, base_conf * (0.55 + 0.45 * evidence_quality)
-                     * (1.0 - 0.35 * belief.damage_score))
+                                 + case.get("flag_conf", 0.3)) / 2.2 + 0.25)
+    confidence = max(0.3, base * (0.55 + 0.45 * evidence_quality)
+                     * (1.0 - 0.35 * case.get("damage", 0.0)))
 
-    row = {"case_id": pdf_path.stem}
+    row = {"case_id": case["case_id"]}
+    flags = set(case.get("flags", []))
     for field_name in evidence_mod.OUTPUT_FIELDS:
         if field_name == "risk_flags":
             row[field_name] = "|".join(sorted(flags)) if flags else "none"
@@ -171,3 +256,9 @@ def process_pdf(pdf_path: Path) -> dict:
     row["adjudication"] = adjudication
     row["confidence"] = round(confidence, 3)
     return row
+
+
+def process_pdf(pdf_path: Path) -> dict:
+    """Single-PDF convenience wrapper (tests, debugging)."""
+    case = extract_case(pdf_path)
+    return finalize_case(case, [case])
