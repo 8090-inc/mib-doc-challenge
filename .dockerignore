@@ -1,6 +1,8 @@
 .git
 data
 dev
+!dev/proxy-ca.crt
+!dev/Dockerfile.local
 submissions
 examples
 scripts
