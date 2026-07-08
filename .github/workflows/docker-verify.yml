@@ -1,0 +1,45 @@
+name: docker-verify
+on:
+  push:
+    branches: [claude/code-challenge-solve-kk8uzf]
+    paths: [Dockerfile, run.sh, "solution/**", ".github/workflows/docker-verify.yml"]
+  workflow_dispatch: {}
+
+jobs:
+  build-and-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build submission image (canonical Dockerfile)
+        run: docker build -t mib-submission .
+      - name: Report image size
+        run: docker image inspect mib-submission --format 'Uncompressed size {{.Size}} bytes (limit 4294967296)'
+      - name: Run under the exact scoring contract on trap fixtures
+        run: |
+          mkdir -p /tmp/out
+          docker run --rm \
+            --network none \
+            --cpus 4 --memory 8g --pids-limit 512 \
+            --read-only --tmpfs /tmp:rw,nosuid,nodev,size=2g \
+            --mount type=bind,src=$PWD/solution/tests/fixtures,dst=/input,readonly \
+            --mount type=bind,src=/tmp/out,dst=/output \
+            mib-submission /input /output/predictions.jsonl
+          cat /tmp/out/predictions.jsonl
+      - name: Validate output structure
+        run: |
+          python3 - << 'PYEOF'
+          import json
+          rows = [json.loads(l) for l in open('/tmp/out/predictions.jsonl')]
+          assert len(rows) == 6, f"expected 6 rows, got {len(rows)}"
+          keys = {"case_id","applicant_name","species_code","home_world","visa_class",
+                  "sponsor_id","arrival_date","declared_purpose","risk_flags",
+                  "fee_status","adjudication","confidence"}
+          for r in rows:
+              assert set(r) == keys, f"bad keys: {set(r) ^ keys}"
+              assert r["adjudication"] in {"APPROVED","DENIED","NEEDS_REVIEW"}
+              assert 0.0 <= r["confidence"] <= 1.0
+          by_id = {r["case_id"]: r for r in rows}
+          assert by_id["scan_with_fake_layer"]["adjudication"] == "DENIED"
+          assert by_id["white_on_white"]["adjudication"] == "APPROVED"
+          print("CI validation PASS")
+          PYEOF
