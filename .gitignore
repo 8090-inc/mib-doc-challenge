@@ -11,3 +11,6 @@ data/train/
 data/validation/
 *.zip
 *.zip.sha256
+
+# Dev-only scratch (local docker build shims, caches)
+dev/
