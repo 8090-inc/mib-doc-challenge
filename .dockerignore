@@ -1,0 +1,9 @@
+.git
+data
+dev
+submissions
+examples
+scripts
+scripts_dev
+docs
+*.md

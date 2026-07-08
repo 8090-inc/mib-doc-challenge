@@ -1,0 +1,7 @@
+pypdfium2==5.11.0
+PyMuPDF==1.28.0
+opencv-python-headless==5.0.0.93
+numpy==2.4.6
+rapidfuzz==3.14.5
+pytesseract==0.3.13
+Pillow==12.3.0
