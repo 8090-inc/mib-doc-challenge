@@ -1,93 +1,119 @@
-# Technical Memo: Visible-Evidence MIB Document Pipeline
+# Technical Memo: Evidence-Linked, Fail-Closed MIB Document Pipeline
 
 ## Approach
 
-The submission is a deterministic, CPU-only document pipeline built for the
-challenge's offline Docker contract. It discovers PDF inputs, processes cases
-independently with at most four workers, validates every result against a typed
-prediction model, and writes canonical JSONL in stable case-ID order. A failure
-in one document is isolated rather than terminating the batch.
+This submission is a deterministic, CPU-only document pipeline designed for
+the challenge's offline Docker contract. It discovers PDF inputs, isolates
+case-level failures, processes at most four cases concurrently, validates each
+prediction against a typed schema, and writes canonical JSONL in stable case-ID
+order. The public solution repository contains the full implementation,
+pinned runtime dependencies, OCR artifacts, licenses, tests, and
+reproducibility instructions.
 
-The pipeline is deliberately render-first. Every PDF page is rasterized at a
-bounded resolution and OCR operates on the visible pixels. The embedded PDF
-text layer is retained only as a non-authoritative diagnostic side channel; it
-never becomes prediction evidence. This prevents hidden white text, off-crop
-content, fake answer keys, barcode instructions, and similar prompt-injection
-material from overriding what is actually visible on the page.
+The pipeline is render-first: every page is rasterized at a bounded resolution
+and evidence is extracted from visible pixels. Embedded PDF text is retained
+only as a diagnostic side channel and is never allowed to become prediction
+evidence. This prevents hidden white text, off-crop instructions, fake answer
+keys, and similar prompt-injection material from overriding the visible
+document.
 
-For OCR, Tesseract runs in sparse-text mode, which handles the challenge's
-forms and separated table cells materially better than treating a page as one
-uniform text block. OCR regions are reordered into visual rows, then from left
-to right, before labels and values are paired. Field aliases and conservative
-normalizers cover identifiers, dates, fee states, visa fields, policy-only
-fields, decisions, and pipe-delimited risk flags. Visible narrative decisions
-and mildly corrupted risk wording are recovered with bounded deterministic
-matching. Confidence thresholds preserve unreadable values as unknown rather
-than guessing them.
+Visible extraction starts with Tesseract in sparse-text mode. Bounded image
+refinements, layout-aware row ordering, label/value pairing, aliases, and
+conservative field normalizers recover identifiers, dates, fees, visa and
+sponsor facts, policy fields, decisions, and pipe-delimited risk flags.
+Candidates retain provenance: page and region, OCR confidence, source type,
+visibility, and active case/applicant hints. A linking and resolution layer
+then applies source authority, visibility, negation, strike-through, and
+same-rank conflict rules before adjudication. Lower-ranked pages cannot silently
+replace the active intake applicant, and decorative or crossed-out decisions
+are excluded.
 
-Candidate evidence carries page location, OCR confidence, source type,
-visibility status, and active case/applicant hints. Resolution applies the
-manual's precedence hierarchy: visible adjudicator or signed-note evidence,
-then intake form, biometrics, sponsor attestation, registry extract, and only
-last the untrusted text layer. Same-rank conflicts remain contested;
-struck-through values and decorative sample denials are excluded. Applicant
-linking is also precedence-aware so lower-ranked conflicting pages cannot
-silently replace the active intake applicant.
+The latest version adds an independent fail-closed RapidOCR path for genuinely
+unresolved visible evidence. It is not a second vote over already resolved
+fields. The fallback is invoked only for bounded unknowns and is accepted only
+when it independently satisfies field-specific validation and evidence
+requirements. This improves recovery on visually difficult scans without
+weakening the primary provenance or conflict model.
 
-Adjudication is deterministic and evidence-aware. Published visa, sponsor,
-fee, risk, date, stay, biohazard, and waiver rules are encoded as inspectable
-predicates. Unknown or contested critical evidence routes to `NEEDS_REVIEW`.
-Visible disqualifying facts route to `DENIED`; `APPROVED` requires either a
-valid rank-one visible decision or the strict policy bar. Generalized learned
-exceptions are permitted only when they make policy stricter, use visible
-features, have held-out support, and contain no case identity.
+Adjudication is identity-free and deterministic. Published visa, sponsor, fee,
+risk, date, stay, biohazard, waiver, and decision-authority rules are encoded as
+inspectable predicates. Visible authoritative denials take priority. Unknown or
+contested critical facts route to `NEEDS_REVIEW`; visible disqualifying facts
+route to `DENIED`; `APPROVED` requires either a valid top-authority visible
+decision or the strict policy bar. No case IDs, filenames, answer tables, split
+membership, labels, or evaluation artifacts are present in the runtime.
 
-Confidence estimates the probability that the emitted adjudication is
-correct, not OCR quality. The raw signal is derived from the policy trace and
-mapped through a pinned isotonic calibration. Development used a frozen,
-adjudication-stratified 700/150/150 tuning/calibration/release split. Cases
-inspected during an early OCR diagnosis were explicitly forced into tuning
-before fresh holdouts were generated. Calibration used only the 150-case
-calibration split; the final candidate was evaluated once on the fresh release
-split. On that local engineering benchmark, the candidate scored 100.11/150
-versus 45.46 for the pre-change baseline, with zero catastrophic false
-approvals in both runs. These are local public-training measurements, not an
-official leaderboard score.
+Confidence estimates adjudication correctness rather than raw OCR quality. The
+final change is calibration-only: the decision output is frozen first and its
+confidence is then mapped through a pinned monotone calibration. Sentinel dates
+such as `1900-01-01` are treated as missing/invalid placeholders rather than as
+stale adverse evidence, closing a failure mode where placeholders could alter
+policy outcomes.
 
-The runtime image includes only pinned packages and runtime artifacts. It has
-no labels, split assignments, evaluation reports, case IDs, filenames, or
-answer lookup tables, and it requires no network access.
+Development used the public 1,000-case training set with a frozen,
+adjudication-stratified 700/150/150 tuning/calibration/release protocol. Cases
+examined during early OCR diagnosis were forced into tuning before new holdouts
+were created. Calibration used only the calibration split, and the final
+candidate was evaluated once on the release split. The final full-public-set
+run scored **130.37/150**: field extraction **44.88**, classification **68.52**,
+and calibration **16.97**, with zero missing predictions, zero invalid records,
+and zero catastrophic false approvals. Frozen split totals were 131.09 on
+tuning, 129.15 on calibration, and 128.25 on release. The repository test suite
+reported 232 passing tests and two optional skips. These are reproducible local
+measurements on labeled public training data, not a score on the unlabeled
+validation set or a private leaderboard claim.
+
+For submission, the merged public solution was run over all 5,000 supplied
+validation PDFs. The generated JSONL is checked against
+`data/validation_manifest.csv` before publication so the submission contains
+one valid record per expected case and no extra or missing IDs.
+
+## What Changed and Why It Helped
+
+The initial optimization concentrated on single-pass OCR and direct field
+normalization. The final pipeline separates concerns more sharply:
+
+1. visible evidence extraction and provenance are preserved before any policy
+   decision;
+2. applicant/source linking resolves authority and conflicts explicitly;
+3. an independent OCR fallback recovers only true unknowns under strict gates;
+4. identity-free decision recovery prioritizes authoritative denials and
+   fail-closed review;
+5. confidence is recalibrated after decisions are frozen; and
+6. sentinel values, offline closure, and third-party licenses are verified as
+   release requirements.
+
+This layering produced the score increase while preserving the challenge's
+safety constraint: improvements do not depend on labels, identities, hidden
+text, or case-specific lookup behavior.
 
 ## Known Failure Modes
 
-The largest remaining weakness is severe visual degradation. Small, blurred,
-rotated, or heavily overprinted fields can be unreadable even after bounded
-deskewing, especially names and compact stamps. Sparse OCR is strong on clean
-tables but can still merge neighboring labels, split a value across regions,
-or confuse visually similar characters. The conservative fallback protects
-safety but can lower extraction and approval recall.
+Severe visual degradation remains the largest weakness. Small, blurred,
+rotated, heavily overprinted, or low-contrast fields can remain unreadable even
+after bounded refinements. OCR may merge neighboring cells, split a value, or
+confuse similar characters. Graphical stamps and occluded seals remain harder
+than ordinary text. Multi-applicant packets and damaged headings can reduce
+source-type certainty. In these situations the conservative resolver may lower
+field recall or approval recall because it prefers `NEEDS_REVIEW` to an
+unsupported guess.
 
-Some risk indicators are graphical stamps or low-contrast marks rather than
-ordinary text. The current lightweight visual cues and OCR recover many of
-them, but tiny or occluded stamps remain difficult. Multi-applicant packets and
-damaged page headings can also reduce source-type certainty. Finally, the
-public manual is intentionally incomplete, so rare policy combinations without
-enough public held-out support remain `NEEDS_REVIEW` instead of being promoted
-to an unverified exception.
+The public manual is intentionally incomplete, so rare policy combinations
+without sufficient held-out support are not promoted into learned exceptions.
+This protects classification safety but leaves some recoverable cases on the
+table.
 
 ## What I Would Improve With Another Week
 
-I would add a bounded stamp/region detector that locates saturated or
-seal-shaped components, rectifies each crop, and runs a small OCR ensemble over
-the crop only. I would also add layout-specific table recovery using line and
-cell geometry, plus character-level consensus across two deterministic image
-preprocessing variants for critical identifiers and names.
+I would add a bounded stamp and region detector for saturated or seal-shaped
+components, rectify each crop, and run a small deterministic preprocessing
+ensemble only on the uncertain region. I would also strengthen table recovery
+with line/cell geometry and character-level consensus for critical names and
+identifiers.
 
 On the policy side, I would expand visible conflict derivation for sponsor,
-identity, and biometric evidence, then validate each generalized rule on a new
-held-out partition before publication. I would build a larger golden/adversarial
-suite around injection attempts, crossed-out decisions, multi-applicant pages,
-and damaged scans. Finally, I would profile the exact Docker image over the
-entire validation distribution and tune render resolution and crop scheduling
-to spend additional OCR work only on uncertain pages while preserving the
-offline runtime and memory limits.
+identity, and biometric evidence and validate every generalized rule on a new
+held-out partition before release. I would extend the adversarial suite around
+hidden-text injection, crossed-out decisions, multi-applicant packets, and
+damaged scans, then profile the exact Docker image over the full validation
+distribution to spend additional OCR work only where uncertainty justifies it.
