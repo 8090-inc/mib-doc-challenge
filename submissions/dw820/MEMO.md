@@ -4,9 +4,9 @@
 
 An offline, CPU-only pipeline that turns each PDF packet into a structured applicant
 record and an adjudication (`APPROVED` / `DENIED` / `NEEDS_REVIEW`) with a calibrated
-confidence. On a held-out dev split it scores **123.89 / 150** (classification 63.65/80,
-extraction 43.92/50, calibration 16.33/20, 3 catastrophic false approvals), up from a
-74.27 first-pass baseline, at **~0.8–2 s/PDF** — comfortably inside the 6 s budget.
+confidence. On a held-out train split it scores **129.21 / 150** (classification 68.42/80,
+extraction 43.42/50, calibration 17.37/20, 5 catastrophic false approvals).
+At **~0.8–2 s/PDF** — comfortably inside the 6 s budget.
 
 ## Approach
 
