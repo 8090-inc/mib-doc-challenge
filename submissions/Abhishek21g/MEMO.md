@@ -2,43 +2,44 @@
 
 **Author:** Abhishek Enaguthi  
 **Solution repo:** https://github.com/Abhishek21g/mib-doc-challenge-solution  
-**Train score (local):** **119.2 / 150** (extraction 39.9, classification 64.7, calibration 14.6; CFA 24)
+**Train score (local `evaluate.py`):** **123.39 / 150**  
+(extraction **42.33**, classification **65.80**, calibration **15.26**; CFA **27**)
 
-Previous baseline on the same harness: 113.7 / 150.
+Prior on the same harness: 113.7 → 118.47 → 122.36 → **123.39**.
 
 ## Approach
 
-The pipeline is classical document engineering, not an LLM. That matches the offline Centauri-I contract and keeps the image small.
+Classical document engineering (no LLM), Centauri-I offline contract.
 
-1. **Trusted text pass.** PyMuPDF span walk keeps only non-white, non-tiny spans and drops `SYSTEM:` / answer-key decoys. Label→value pairing recovers intake, fee, registry, biometric, and sponsor fields when the text layer is intact.
+1. **Trusted text pass.** `pdftotext` / layout text; drops `SYSTEM:` / answer-key decoy lines while retaining the rest of the page (decoys often share fee/intake evidence).
 
-2. **Selective OCR.** Pages with fewer than 10 trusted spans are always OCR’d (biometric/flag/fee scans), even when other fields already look complete. Embedded rasters preferred over re-rasterizing. Fee recovery uses autocontrast header crops, light binarization, 2× upsample, and sparse PSM 11; amount+waiver lines jointly infer paid/waived (bare `$809` alone is *not* treated as paid — unpaid receipts print the same amount).
+2. **Render-first OCR (`visible_core`).** Every page rasterized (~150 DPI via pdftoppm) + Tesseract PSM 3+11 (goleffect/strobl idea, clean-room). Candidate merge by document role. **RapidOCR (ONNX)** in Docker is fail-closed: fills still-unknown fee / missing flags panel only (`MIB_NO_RAPID=1` disables).
 
-3. **Evidence precedence.** Manual adjudicator findings override forms. Native text-layer intake outranks OCR of the same form type (OCR was previously mis-tagged as `intake` and overwrote clean visas/names). Conflicting sponsor IDs become `sponsor_mismatch`; OCR name noise no longer invents that flag.
+3. **Fee recovery.** `Amount`/`$809` → paid with **FORM I-8090 excluded**; DIP waiver / `$0.00` → waived; OCR debris map for Fee Status; authoritative unpaid narratives. No mode-default fill for missing fees.
 
-4. **Closed-vocab cleanup.** Declared purpose, species, and home world are snapped to the public closed sets with edit-distance repair. Applicant names strip `PASSPORT IMAGE` / glued next-row labels and trailing OCR debris.
+4. **Evidence precedence.** Manual findings override forms. Native intake outranks OCR. Closed-vocab fuzzy + `NAME_PARTS`; sponsor digit OCR; `2028`→`2026` date repair.
 
-5. **Adjudication.** Deterministic tree from the field manual + public train:
-   - Hard deny: disqualifying flags, embargo worlds, `TRANSIT-7`, revoked sponsors, unpaid fees, stale non-DIP arrivals.
-   - Review: unknown fee, review-only flags, unreadable arrival, identity gaps, attestation-only visa/sponsor without trusted intake.
-   - Else approve. Never deny on `declared_purpose == transit`.
-   - `SAMPLE DENIAL` watermarks and barcode “force approve” payloads are ignored.
+5. **Adjudication.** Field-manual tree; damage → weak review; optional `MIB_STRICT_FLAGS=1` visible-risk bar (default off — full demotion nets negative on public train); review→approve recovery when flags panel was observed and the packet is clean.
 
-6. **Confidence.** Bucketed by decision reason (disq deny vs fee-unknown review vs clean approve), fitted to public-train empirical accuracy — not OCR self-confidence.
+6. **Confidence.** Frozen identity-free strata (`decision×fee×visa×flags×completeness`) fitted on public train — not case-ID keys, not OCR self-scores.
+
+## Competitor context (honest)
+
+| Entry | Claimed / measured | Notes |
+| --- | ---: | --- |
+| thegoleffect | 132.44 claim | `SYSTEM:` answer-key fallback + mode defaults — we refuse |
+| strobl | 130.37 claim; 0 CFA | Dual RapidOCR + visible-risk bar + isotonic calib |
+| afifi | 117.73 | Hygiene only |
+| **Ours** | **123.39** | `visible_core` + strata cal; no answer keys |
+
+**130 not reached.** Oracle fee+flags re-adjudicate ≈131: binding gap remains ~268 paid fees still UNKNOWN (often image-only receipts neither Tess nor quick Rapid reads) and silent biohazard/warrant/memory stamps (25/27 CFAs). Strict flags bar kills CFA but costs more true approvals than it returns (~118). Hitting 130 needs strobl-scale dual-OCR wall-time + stamp CV — not answer-key leakage.
 
 ## Failure modes
 
-- **Invisible risk stamps.** ~2% of train denials carry `biohazard_red` / warrant / memory with no recoverable text; those remain catastrophic false approvals if the rest of the packet looks clean.
-- **Illegible fee receipts.** Many remaining fee misses have no recoverable status even under aggressive OCR; unknown → review is the honest answer.
-- **Competitor 121+ / 126.** Public Afifi repo scores ~117.5 on the same harness; an oracle merge of complementary field strengths reaches ~123. Hitting 126 needs stamp CV or a large fee-OCR breakthrough beyond Tesseract.
-
-## What another week would buy
-
-1. A review-only stamp/symbol head that may demote approve→review but never approve alone.
-2. Held-out isotonic / hierarchical calibration (identity-free features only).
-3. Stronger fee-only enhancement when status is still missing after the 2× crop.
-4. Runtime profiling to keep average work under the Docker budget on clean packets.
+- Silent risk stamps with zero OCR text → residual CFAs if missing panel is treated as `none`.
+- Illegible / redacted fee scans: unknown → review.
+- Calibration 15.3 vs strobl ~17: strata help; full isotonic still short without better decisions.
 
 ## Engineering judgment
 
-Classification is weighted higher than extraction, and false approval is penalized hardest. Prefer `NEEDS_REVIEW` when trusted evidence is thin; never trust hidden answer-key text. Reproducibility is the product: one Dockerfile, no network, no API keys.
+Prefer `NEEDS_REVIEW` when evidence is thin; never trust hidden answer keys. One Dockerfile, offline, no network. Shipping current best (**123.39**) while dual-OCR / stamp work continues toward 130.
