@@ -2,7 +2,7 @@
 
 **Author:** Henry Gilbert (`henrygilbert22`)  
 **Solution:** offline PyMuPDF + selective Tesseract pipeline with rule-based adjudication  
-**Measured train score (iter-5, official Docker harness):** 116.40 / 150 — classification 62.48, extraction 39.20, calibration 14.72, 15 catastrophic false approvals, 0.81 s/PDF, 0.46 GiB image, 1.37 GiB peak RAM. Validation score not reported (private labels).
+**Measured train score (iter-13, official Docker harness):** 120.72 / 150 — classification 63.91, extraction 41.77, calibration 15.04, 11 catastrophic false approvals, ~0.83 s/PDF, 0.46 GiB image. Solution commit `7095051`. Validation score not reported (private labels); validation predictions regenerating under iter-13 image.
 
 ---
 
@@ -24,7 +24,9 @@ The FIELD_MANUAL defines a **visible-evidence trust model**: adjudicator stamps 
 
 **Adjudication.** `adjudicator.py` applies deterministic policy: disqualifying flags → deny; `TRANSIT-7` work denial; revoked sponsors (public manual + **train-inferred** extras in `REVOKED_SPONSORS`, not case lookups); fee/unpaid/waiver rules; 180-day stale arrival (receipt date 2026-07-22); visible manual findings; stamp logic with sample-denial watermark and rescinded-denial handling; multi review-flag escalation. Contradictions or hidden native presence default to `NEEDS_REVIEW` unless a visible denial path is already established.
 
-**Confidence.** `confidence.py` maps evidence quality (field completeness, mean OCR confidence, native–OCR corroboration, hidden-text and contradiction penalties) onto `[0.01, 0.99]`, with reason-code caps so explicit policy denials stay high and missing-evidence reviews stay low — targeting Brier calibration (train mean Brier 0.132, 14.72 / 20 pts).
+**OCR post-processing.** `vocab_correct.py` applies closed-vocabulary correction with confusion-weighted single-character edits on OCR-sourced text only (never native spans). Illegible biometric pages get a dual-stem OCR recovery pass when primary routing leaves `biometric_id` or `risk_flags` empty.
+
+**Confidence.** `confidence.py` maps evidence quality (field completeness, mean OCR confidence, native–OCR corroboration, hidden-text and contradiction penalties) onto `[0.01, 0.99]`, with reason-code caps and principled dual-view dampening when native and OCR disagree on high-stakes fields. Train-fitted per-case lookup calibration was explicitly rejected as overfit-prone; all caps are rule-derived from evidence quality, not label lookup tables.
 
 ---
 
@@ -60,39 +62,39 @@ PSM 11 (sparse text) outperformed PSM 6 (uniform block) on form scans with isola
 
 ## Empirical results (train, official harness)
 
-**Iteration 5 full train** (`eval-runs/iteration-5-full/`):
+**Iteration 13 full train** (official Docker, solution commit `7095051`):
 
 | Section | Score |
 | --- | ---: |
-| Total | **116.40** / 150 |
-| Classification | 62.48 / 80 |
-| Extraction | 39.20 / 50 |
-| Calibration | 14.72 / 20 |
+| Total | **120.72** / 150 |
+| Classification | 63.91 / 80 |
+| Extraction | 41.77 / 50 |
+| Calibration | 15.04 / 20 |
 | Missing penalty | 0.00 |
 
-Runtime: **806.5 s** wall, **0.807 s/PDF**, peak memory **1,365 MiB**, image **0.459 GiB**. All 1,000 train cases predicted; schema valid.
+Runtime: **~833 s** wall / 1,000 PDFs (**~0.83 s/PDF**), image **0.46 GiB**. All 1,000 train cases predicted; schema valid.
 
-**Progression:** iter-1/2 tuned on a 60-case stratified slice (103.82 → 120.96). Full-train iter-3 baseline 114.46 (20 CFA) → iter-4 116.08 (15 CFA, selective OCR) → iter-5 116.40 (parser/adjudication hardening). Holdout 100-case eval: 116.29, 0 CFA.
+Local re-run (same commit, non-Docker): 120.95 / 150 — classification 64.04, extraction 41.77, calibration 15.14, 11 CFAs (within harness variance).
 
-**Failure modes (iter-5):**
+**Progression:** iter-12 Docker baseline 120.27 → iter-13 **120.72** (+0.45). Holdout gate (20%, `case_id % 5 == 0`): adopted +0.30 total vs prior; CFAs flat at 2 on holdout slice.
 
-1. **Catastrophic false approvals (15):** almost all `DENIED→APPROVED` with strong field extraction but missed disqualifying `risk_flags` (14/15 missed `risk_flags` in worst-case analysis).
-2. **Fee status (~59% accuracy):** OCR/normalization on degraded fee receipts.
-3. **Over-review:** 128 `APPROVED→NEEDS_REVIEW` — conservative missing-evidence and low-OCR gates.
-4. **Residue denials misclassified as review:** 91 `DENIED→NEEDS_REVIEW`.
+**Failure modes (iter-13):**
+
+1. **Catastrophic false approvals (11):** residual cases are truncated packets or missing biometric/registry graphic evidence — not parser bypasses on clean packets.
+2. **Fee status:** OCR/normalization on degraded fee receipts remains the largest extraction gap.
+3. **Over-review:** conservative missing-evidence and dual-view dampening still inflate `APPROVED→NEEDS_REVIEW`.
 
 ---
 
 ## Next improvements
 
-1. **Risk-flag sensitivity:** tighten approval when biometric/adjudication pages show partial flag prose or registry `EMBARGO REVIEW` without full `Observed flags:` parse.
-2. **Fee receipt channel:** expand fuzzy label patterns and second-pass OCR variants (already prototyped in bench) without full-document OCR.
-3. **CFA elimination:** block `clean_packet` approval when any high-risk page type lacks explicit negative flag attestation.
-4. **Calibration pass:** separate confidence curves for review vs deny reason families (counterfactual analysis showed `all_risk_none_approvals` group carries most CFA risk).
-5. **Submission packaging:** open PR with validated predictions + this memo (validation complete: 5,000/5,000, 0.957 s/PDF, 0.459 GiB image, ~1.29 GiB peak; no validation score).
+1. **Truncated-packet CFAs:** detect incomplete biometric/registry page sets and force review/deny when graphic evidence is structurally absent.
+2. **Fee receipt channel:** expand fuzzy label patterns and second-pass OCR variants without full-document OCR.
+3. **Risk-flag sensitivity:** tighten approval when partial flag prose or registry `EMBARGO REVIEW` appears without full `Observed flags:` parse.
+4. **Validation packaging:** copy iter-13 Docker validation run to `predictions.jsonl` once complete (regenerating under iter-13 image; score remains private).
 
 ---
 
 ## Compliance statement
 
-No validation labels, no per-case hardcoding, no network/API/LLM usage at runtime. Sponsor revocation list includes train-inferred IDs disclosed in source comments. Final validation complete (5,000/5,000 predictions, schema-validated); public solution-repo publication **pending Henry review**.
+No validation labels, no per-case hardcoding, no network/API/LLM usage at runtime. Sponsor revocation list includes train-inferred IDs disclosed in source comments. Validation Docker run in progress under iter-13 image; `predictions.jsonl` in this folder may lag until copied. Public solution-repo publication **pending Henry review**.

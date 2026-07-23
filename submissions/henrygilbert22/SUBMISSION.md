@@ -16,20 +16,20 @@
 | Resources | 4 CPU, 8 GiB RAM, read-only root, `/tmp` tmpfs, `/output` bind mount |
 | Parallelism | `MAX_WORKERS=4` process pool |
 | Models | None bundled (Tesseract via apt; no ONNX/LLM weights) |
-| Measured image | 0.459 GiB uncompressed (iter-5 full eval) |
-| Measured throughput | 0.807 s/PDF on 1,000 train PDFs |
+| Measured image | 0.46 GiB uncompressed (iter-13 full eval) |
+| Measured throughput | ~0.83 s/PDF on 1,000 train PDFs |
 
-## Validation contract (final run)
+## Validation contract (iter-13 image)
 
 | Metric | Value |
 | --- | ---: |
-| Predictions | **5,000 / 5,000** |
-| Throughput | **0.957 s/PDF** |
-| Image size | **0.459 GiB** |
-| Peak container RAM | **~1.29 GiB** |
+| Predictions | **Regenerating** (Docker run in progress) |
+| Throughput | TBD (prior iter-5 run: 0.957 s/PDF) |
+| Image size | **0.46 GiB** (iter-13 train) |
+| Peak container RAM | TBD |
 | Validation score | **Not reported** (private labels) |
 
-`predictions.jsonl` in this folder matches the final Docker run and passes `validate_submission.py --require-complete`.
+`predictions.jsonl` in this folder will be replaced once the iter-13 validation Docker run completes and passes `validate_submission.py --require-complete`.
 
 ## Reproduce validation predictions
 
@@ -60,10 +60,10 @@ python3 /path/to/mib-doc-challenge/scripts/validate_submission.py \
 
 | File | Purpose |
 | --- | --- |
-| `predictions.jsonl` | 5,000 validation predictions — **present and schema-validated** (5,000/5,000) |
+| `predictions.jsonl` | Validation predictions — **regenerating under iter-13 image** |
 | `MEMO.md` | Technical memo (architecture, trust model, measured train results) |
 | `SUBMISSION.md` | This file |
 
 ## Train proxy (public labels only)
 
-Full-train Docker eval (iteration 5): **116.40 / 150** — not a validation score.
+Full-train Docker eval (iteration 13, commit `7095051`): **120.72 / 150** — classification 63.91, extraction 41.77, calibration 15.04, 11 CFAs. Not a validation score.
