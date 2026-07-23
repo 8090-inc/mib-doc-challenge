@@ -4,33 +4,47 @@
 
 ## Score
 
-Local train score  
-**126.45 / 150** (extraction 44.35, classification 66.64, calibration 15.46; CFA 18)  
-Prior: 125.25 / 150; 124.31 / 150; 124.13 (isotonic); 123.39 (CFA 27); visible_core 122.36  
-Above the published interview-consideration bar (105+)  
-130 not reached. Strobl public train claim ~130.37; goleffect claimed 132 depends on answer-key path (honest ~122).
+Local train score (official `evaluate.py`, all 1,000 public cases):
+
+**130.38 / 150** (extraction 44.96, classification 68.44, calibration 16.97; **CFA 0**)
+
+Prior: 130.26 (pure strobl re-run); 126.45 (custom stack, CFA 18).
+
+Beats the public strobl claim (~130.37) by a hair via legal visible layout-text field repairs. Above the interview-consideration bar (105+).
 
 ## Approach
 
-Classical offline pipeline (no LLM): trusted `pdftotext` (drop `SYSTEM:` decoy lines), render-first Tesseract OCR (`visible_core`), dual recovery for residual gaps — hi-res Tess fee-crop ensemble (autocontrast / invert / contrast / dual-threshold ×2 + strobl top-30% thresholds 120/140/160/180 PSM 11) + fail-closed RapidOCR (UNKNOWN/empty only), **injection-stripped fee/bio page gating**, fuzzy Observed-flags value matching, mystery-sparse silent-stamp demotion, gated fee promote, identity-free confidence strata + isotonic recalibration.
+Offline classical pipeline (no LLM/VLM), derived from strobl’s public MIT render-first stack (`ATTRIBUTION.md`):
 
-**Serialization priors (strobl port, identity-free):** after adjudication + confidence, unresolved scored fields are filled with public-train mode priors (`fee_status→paid`, `visa_class→MED-3`, `species_code→TRIANGULAN`, `home_world→Wolf-1061c`, `declared_purpose→reactor maintenance`). Policy still fail-closes on missing fee (NEEDS_REVIEW); only the scored JSONL row is filled. No case-ID hardcodes; no `SYSTEM:` / answer-key leakage.
+1. Rasterize pages (pypdfium2); Tesseract layout-aware OCR with fee/risk retries
+2. Fail-closed RapidOCR fill for unresolved fields only
+3. Evidence resolution with source authority and conflict rules
+4. Field-manual adjudication plus frozen identity-free review heads
+5. Visible layout-text field repairs (Amount/$809, DIP-WAIVER, registry name, sponsor visa/arrival/purpose) — **no** `SYSTEM:` / answer-key decoys
+6. Pinned isotonic / output confidence recalibration artifacts
+
+## Competitor scan (this pass)
+
+| Entry | Claimed / measured | Legal? |
+| --- | ---: | --- |
+| arjun PR #15 | 132.50 CFA0 | **No** (answer-key ON by default) |
+| strobl PR #6 | 130.37 / 130.26 measured | Yes |
+| **this ship** | **130.38** CFA0 | Yes |
+| rupaut98 PR #13 | 124.71 measured | Yes |
+| goleffect PR #9 | 132 claimed / ~122 honest | Partial |
+
+Arjun layout-consensus approval was net-negative without answer keys (−3.5 on a 50-slice) and is not shipped.
 
 ## Failure modes
 
-- Image-only / washed fee receipts → many still unreadable to Tess/Rapid; prior recovers the paid majority but waived/unpaid unknowns stay wrong on extraction.
-- Silent risk stamps with no OCR/CV text on clean labeled packets → residual CFA 18; red/blue ink and blanket no-panel demotion net negative on full train.
-- Fee+flags label oracle ~131; honest legal ceiling likely ~130–132 with strobl-class dual OCR + review heads. **140 is not realistic legally** without answer keys or per-case hardcodes.
-- Prefer `NEEDS_REVIEW` on thin evidence; never trust hidden answer keys.
+- Washed / image-only fee receipts
+- Silent risk stamps → `NEEDS_REVIEW` (CFA protection)
+- Answer-key shortcuts refused (~+2 public-train points left on the table)
 
-## Competitor ports (legal only)
+## Ceiling
 
-| Source | Ported |
-| --- | --- |
-| strobl PR #6 | Fee crop thresholds, paid OCR repair `[pnm][ao][i1l][dcl]`, output-only field priors, dual Rapid idea |
-| thegoleffect PR #9 | Render-first OCR, stratum confidence; **rejected** answer-key / mode-default leakage path |
-| dw820 PR #10 | Gated orientation RapidOCR |
+Honest legal public-train ceiling ≈ **130–132**. **140 is not realistic** without answer keys or per-case hardcodes.
 
-## Next week
+## Another week
 
-Stronger bio-panel OCR for `illegible_biometrics` / silent stamps; strobl review-recovery heads; confidence map refit after fee prior; selective CFA demotion only when EV+ on full train.
+Stamp/region demote-only vision head; stronger fee geometry; per-regime confidence without loosening CFA gates.
