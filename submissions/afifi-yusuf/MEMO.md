@@ -2,21 +2,17 @@
 
 ## Where I started
 
-I come from a computer vision and deep learning background, so my first pass at MIB was representation learning on rendered pages: compact CNNs for packet-level decisions, stamp and region heads for fee and risk cues, autoencoder-style denoising for washed-out scans, and VLM probes on illegible stamps and receipts. That exploration was worth the time. It showed me where the hard packets live, and it showed me that the metric that decides this leaderboard is catastrophic false approvals, not average accuracy. A classifier that guesses well on average still approves the occasional true deny, and one of those costs more than a dozen cautious reviews.
-
-What I shipped is a document-engineering system built around that insight: multi-page evidence fusion, conflict detection, adversarial text filtering, typed field evidence, and safety-critical adjudication, all inside the offline Docker contract.
+I work in computer vision and deep learning, so the first attempts looked like that: compact CNNs on rendered pages, stamp and region heads for fee and risk, denoising for washed scans, VLM probes when OCR failed. That pass mapped the hard packets. It did not yield a shippable adjudicator. Stamp and packet heads never separated clean approvals from silent or icon-only denies with any margin I trusted, and unlocking approvals when risk text was absent produced catastrophic false approvals on train. I kept the diagnostics and rebuilt the runtime as a classical stack: filter adversarial text, rank candidates by document role, type risk so schema `none` is not clearance, and follow the field manual with review as the default when the page is quiet.
 
 ## What the data forced
 
 Packets mix clean digital forms, scan-only pages, sponsor prose, fee receipts, and inspection stamps. The PDF text layer is adversarial as well as incomplete; white or tiny spans can inject false fields. Approving a true deny is punished far harder than a cautious `NEEDS_REVIEW`.
 
-Three lessons from the vision detours mattered more than the models themselves:
+Three dead ends from that vision work:
 
-- **Silent stamps are a trap.** Many labeled denies and reviews have no recoverable risk wording at all. Stamp CNNs and color and shape heuristics never produced a safe signal, and a full-train audit showed that blue, red, and wax stamps do not correlate with fee or adjudication. When the flag is visual-only, `NEEDS_REVIEW` is the honest answer — including any “approve when risk is silent” shortcut.
-- **Illegible fees look like a vision problem and often are not.** Targeted OCR crops and typo repair recovered a real batch of receipts. Past that point the receipts are simply missing or unreadable, and more model capacity mostly added confident wrong guesses.
-- **Waiver shortcuts hurt.** Inferring approval from a visible waiver-style code raised false approvals, so I reverted it.
-
-Those results pushed the design toward trusted evidence fusion over classifier confidence.
+- **Stamps.** Many labeled denies have no recoverable risk wording. Stamp CNNs and color or shape cues never separated clean approvals from silent denies on a full-train audit. Quiet stamps stay in review.
+- **Illegible fees.** Targeted OCR crops and typo repair recovered some receipts. Past that, more model capacity mostly added confident wrong guesses.
+- **Waiver shortcuts.** Inferring approval from a visible waiver-style code raised false approvals, so that path was removed.
 
 ## What shipped
 
@@ -28,10 +24,10 @@ Those results pushed the design toward trusted evidence fusion over classifier c
 
 **Attestation is high-value and high-risk.** Sponsor letters often carry the only clean prose when the intake scan is wrecked. At one point, filling visa and sponsor from the attestation while OCR "completed" species and home world produced an approval over a silent warrant page. Approvals that lean on attestation now require trusted intake fields from the native text layer.
 
-**Layout proofs and CFA-safe reclaim.** After fail-closed adjudication, two identity-free unlocks may promote `NEEDS_REVIEW` → `APPROVED` when visible proofs exist:
+**Layout proofs.** After fail-closed adjudication, two unlocks may change `NEEDS_REVIEW` to `APPROVED` when visible proofs exist:
 
-1. **Clean packet** — explicit risk clearance in the *trusted text layer* (`Observed flags: none` / equivalent), layout-agreeing fee (`Amount $809` or waived receipt), and a real arrival date. OCR-only clearance is refused: it approved a silent deny when decoys and missing arrival skipped the stale-arrival deny.
-2. **Layout consensus** — DIP-1 or XW-2 only (XW-1 excluded), serialized `fee_status=paid`, visible `Amount $809`, unique Registry Name ↔ Applicant match, and no layout risk tokens. Medical-consult purposes are skipped.
+1. **Clean packet.** Explicit risk clearance in the trusted text layer (for example `Observed flags: none`), a layout-agreeing fee (`Amount $809` or waived receipt), and a real arrival date. OCR-only clearance is refused.
+2. **Layout consensus.** DIP-1 or XW-2 only (XW-1 excluded), serialized `fee_status=paid`, visible `Amount $809`, matching Registry Name and Applicant, and no layout risk tokens. Medical-consult purposes are skipped.
 
 **Visible field repairs.** Injection-stripped layout may repair weak/unknown fee, name, visa, arrival, sponsor, purpose, home world, and species. SYSTEM / `answer key only` lines are never used for fields or adjudication.
 
@@ -41,13 +37,13 @@ Runtime stack: Tesseract, RapidOCR, PyMuPDF, and Pillow with four parallel worke
 
 ## Results
 
-On the public train set with the official `evaluate.py`: **120.14 / 150**, from 64.09/80 classification, 40.84/50 extraction, and 15.20/20 calibration, with zero missing cases and **zero catastrophic false approvals**. Relative to the prior fail-closed / forensic baseline (118.21, CFA 0), layout repairs and consensus unlocks recover a slice of true approvals without reopening silent-stamp CFA. Extraction remains the open gap versus render-first public baselines (~45/50).
+On the public train set with the official `evaluate.py`: **120.14 / 150**, from 64.09/80 classification, 40.84/50 extraction, and 15.20/20 calibration, with zero missing cases and **zero catastrophic false approvals**. Relative to the prior fail-closed / forensic baseline (118.21 with zero catastrophic false approvals), layout repairs and consensus unlocks recover a slice of true approvals without reopening silent-stamp errors. Extraction remains the open gap versus render-first public baselines near 45/50.
 
 Throughput stays inside the 6-second-per-PDF Docker budget on 4 vCPUs / 8 GiB.
 
 ## Engineering judgment
 
-Decision quality matters more than squeezing out extra extracted fields. Inventing fees or stamps to chase extraction points loses on false approvals, so the system prefers unknown plus review when evidence is thin. The highest-leverage late wins were fail-closed `FieldEvidence` to kill CFA, then reclaiming only packets with *visible* fee and identity proofs — not silent risk.
+Decision quality matters more than squeezing out extra extracted fields. Inventing fees or stamps to chase extraction points loses on false approvals, so the system prefers unknown plus review when evidence is thin. The highest-leverage late wins were fail-closed `FieldEvidence` to stop catastrophic false approvals, then reclaiming only packets with visible fee and identity proofs, not silent risk.
 
 I deliberately do not transcribe SYSTEM “answer key only” spans. That channel can inflate public-train extraction, but the challenge treats it as decoy / prompt injection.
 
