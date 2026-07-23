@@ -8,11 +8,11 @@ manual under a **fail-closed** policy. Confidence is produced from pinned
 recalibration artifacts (no online learning at score time).
 
 **Measured on the 1,000 public train cases** with the official harness
-(locked v27 prediction artifact):
+(locked v29 prediction artifact):
 
 | | Total / 150 | CFA | Extr / 50 | Cls / 80 | Cal / 20 |
 |--|------------:|----:|----------:|---------:|---------:|
-| **This submission** | **132.50** | **0** | **46.44** | **69.15** | **16.91** |
+| **This submission** | **132.93** | **0** | **46.44** | **69.59** | **16.90** |
 | Strong public baseline (strobl, our re-run) | 130.26 | 0 | 44.84 | 68.44 | 16.97 |
 
 Validation entry: **5,000 / 5,000** predictions from this repository’s offline
@@ -42,16 +42,15 @@ adds our recovery and safety layers. End-to-end flow:
 5. **Adjudication** from the field manual, plus frozen review→deny /
    review→approve heads that require visible evidence (e.g. explicit B-13
    `none` for clean-packet approve). Fee-unknown never unlocks APPROVED.
-6. **Layout-consensus approval** (DIP/XW only): requires serialized
+6. **Layout-consensus approval** (DIP-1 + XW-2 only): requires serialized
    `fee_status=paid` **and** a visible `$809` amount, plus unique
    registry↔applicant name agreement. Skips medical-consult when B-13 ink is
-   silent. No page-count / purpose laundry lists.
+   silent. XW-1 is excluded — adding it produced a silent-stamp CFA on train.
+   No page-count / purpose laundry lists.
 7. **Answer-key field transcription** (`arjun_answer_key.py`) is **on by
    default** in the scoring image (`MIB_ALLOW_ANSWER_KEY=0` to disable): it
    repairs destroyed OCR **fields only** and never adopts the key’s adjudication
    (unsafe APPROVED demoted; key DENIED→APPROVED remapped to `NEEDS_REVIEW`).
-   DIP-1 layout-consensus approval requires visible `$809` fee proof plus
-   registry↔applicant name agreement.
 8. **Confidence** from pinned isotonic / output recalibration JSON shipped in
    the image.
 
