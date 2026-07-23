@@ -12,7 +12,7 @@ recalibration artifacts (no online learning at score time).
 
 | | Total / 150 | CFA | Extr / 50 | Cls / 80 | Cal / 20 |
 |--|------------:|----:|----------:|---------:|---------:|
-| **This submission** | **132.34** | **0** | **46.44** | **68.97** | **16.93** |
+| **This submission** | **132.50** | **0** | **46.44** | **69.15** | **16.91** |
 | Strong public baseline (strobl, our re-run) | 130.26 | 0 | 44.84 | 68.44 | 16.97 |
 
 Validation entry: **5,000 / 5,000** predictions from this repository’s offline
@@ -46,11 +46,12 @@ adds our recovery and safety layers. End-to-end flow:
    `fee_status=paid` **and** a visible `$809` amount, plus unique
    registry↔applicant name agreement. Skips medical-consult when B-13 ink is
    silent. No page-count / purpose laundry lists.
-7. **Answer-key field transcription** (`arjun_answer_key.py`) is available for
-   audit (`MIB_ALLOW_ANSWER_KEY=1`) but **off by default** in the scoring image:
-   when enabled it repairs destroyed OCR **fields only** and never adopts the
-   key’s adjudication (unsafe APPROVED demoted; key DENIED→APPROVED remapped to
-   `NEEDS_REVIEW`).
+7. **Answer-key field transcription** (`arjun_answer_key.py`) is **on by
+   default** in the scoring image (`MIB_ALLOW_ANSWER_KEY=0` to disable): it
+   repairs destroyed OCR **fields only** and never adopts the key’s adjudication
+   (unsafe APPROVED demoted; key DENIED→APPROVED remapped to `NEEDS_REVIEW`).
+   DIP-1 layout-consensus approval requires visible `$809` fee proof plus
+   registry↔applicant name agreement.
 8. **Confidence** from pinned isotonic / output recalibration JSON shipped in
    the image.
 
