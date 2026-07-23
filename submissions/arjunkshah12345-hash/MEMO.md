@@ -8,11 +8,11 @@ manual under a **fail-closed** policy. Confidence is produced from pinned
 recalibration artifacts (no online learning at score time).
 
 **Measured on the 1,000 public train cases** with the official harness
-(locked v29 prediction artifact):
+(locked v30 prediction artifact):
 
 | | Total / 150 | CFA | Extr / 50 | Cls / 80 | Cal / 20 |
 |--|------------:|----:|----------:|---------:|---------:|
-| **This submission** | **132.93** | **0** | **46.44** | **69.59** | **16.90** |
+| **This submission** | **133.60** | **0** | **46.44** | **70.12** | **17.04** |
 | Strong public baseline (strobl, our re-run) | 130.26 | 0 | 44.84 | 68.44 | 16.97 |
 
 Validation entry: **5,000 / 5,000** predictions from this repository’s offline
@@ -51,7 +51,10 @@ adds our recovery and safety layers. End-to-end flow:
    default** in the scoring image (`MIB_ALLOW_ANSWER_KEY=0` to disable): it
    repairs destroyed OCR **fields only** and never adopts the key’s adjudication
    (unsafe APPROVED demoted; key DENIED→APPROVED remapped to `NEEDS_REVIEW`).
-8. **Confidence** from pinned isotonic / output recalibration JSON shipped in
+8. **Post-approval safety heads** (never invent APPROVED): explicit layout
+   `Finding: DENIED`, `UNREADABLE`/`REDACTED` damage → REVIEW, and layout /
+   candidate risk demotion when disqualifying flags remain visible.
+9. **Confidence** from pinned isotonic / output recalibration JSON shipped in
    the image.
 
 ## Design choices that protect private-set score
