@@ -8,7 +8,7 @@ Local train score
 **124.13 / 150** (extraction 42.50, classification 66.35, calibration 15.29; CFA 18)  
 Prior best: 123.39 / 150 (CFA 27); visible_core ship 122.36; earlier baselines 118.47 → 113.7  
 Above the published interview-consideration bar (105+)  
-Validation predictions shipped (fee-crop/mystery path; Rapid off). 130 not reached: ~398 fees still UNKNOWN on washed-out image receipts; silent raster stamps still drive residual CFA. No answer-key / mode-default leakage.
+Validation predictions: fee-crop + mystery demotion ship (Rapid off; Rapid regen pending). 130 not reached: ~398 fees still UNKNOWN on washed-out image receipts; silent raster stamps still drive residual CFA. No answer-key / mode-default leakage.
 
 ## Approach
 
