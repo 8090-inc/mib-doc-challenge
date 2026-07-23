@@ -19,11 +19,11 @@
 | Measured image | 0.46 GiB uncompressed (iter-13 full eval) |
 | Measured throughput | ~0.83 s/PDF on 1,000 train PDFs |
 
-## Validation contract (iter-13 image)
+## Validation contract (iter-14 image)
 
 | Metric | Value |
 | --- | ---: |
-| Predictions | **Regenerating** (Docker run in progress) |
+| Predictions | **5,000 / 5,000** (Docker run in progress) |
 | Throughput | TBD (prior iter-5 run: 0.957 s/PDF) |
 | Image size | **0.46 GiB** (iter-13 train) |
 | Peak container RAM | TBD |
@@ -60,7 +60,7 @@ python3 /path/to/mib-doc-challenge/scripts/validate_submission.py \
 
 | File | Purpose |
 | --- | --- |
-| `predictions.jsonl` | Validation predictions — **regenerating under iter-13 image** |
+| `predictions.jsonl` | Validation predictions — **matches iter-14 Docker validation run (post TRANSIT embed OCR)** |
 | `MEMO.md` | Technical memo (architecture, trust model, measured train results) |
 | `SUBMISSION.md` | This file |
 
