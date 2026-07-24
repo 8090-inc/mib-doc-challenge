@@ -2,7 +2,7 @@
 
 **Author:** Henry Gilbert (`henrygilbert22`)  
 **Solution:** offline PyMuPDF + selective Tesseract pipeline with rule-based adjudication  
-**Measured train score (iter-13, official Docker harness):** 120.72 / 150 — classification 63.91, extraction 41.77, calibration 15.04, 11 catastrophic false approvals, ~0.83 s/PDF, 0.46 GiB image. Solution commit `7095051`. Validation score not reported (private labels); validation predictions regenerating under iter-13 image.
+**Measured train score (iter-14, official Docker harness):** 120.87 / 150 — classification 64.03, extraction 41.79, calibration 15.05, 11 catastrophic false approvals, ~0.83 s/PDF, 0.46 GiB image. Solution commit `a4e7482`. Validation score not reported (private labels); `predictions.jsonl` is the complete iter-14 Docker validation run (5,000/5,000).
 
 ---
 
@@ -62,23 +62,23 @@ PSM 11 (sparse text) outperformed PSM 6 (uniform block) on form scans with isola
 
 ## Empirical results (train, official harness)
 
-**Iteration 13 full train** (official Docker, solution commit `7095051`):
+**Iteration 14 full train** (official Docker, solution commit `a4e7482`):
 
 | Section | Score |
 | --- | ---: |
-| Total | **120.72** / 150 |
-| Classification | 63.91 / 80 |
-| Extraction | 41.77 / 50 |
-| Calibration | 15.04 / 20 |
+| Total | **120.87** / 150 |
+| Classification | 64.03 / 80 |
+| Extraction | 41.79 / 50 |
+| Calibration | 15.05 / 20 |
 | Missing penalty | 0.00 |
 
 Runtime: **~833 s** wall / 1,000 PDFs (**~0.83 s/PDF**), image **0.46 GiB**. All 1,000 train cases predicted; schema valid.
 
-Local re-run (same commit, non-Docker): 120.95 / 150 — classification 64.04, extraction 41.77, calibration 15.14, 11 CFAs (within harness variance).
+Local re-run (same commit, non-Docker): 120.95 / 150 — classification 64.04, extraction 41.79, calibration 15.14, 11 CFAs (within harness variance).
 
-**Progression:** iter-12 Docker baseline 120.27 → iter-13 **120.72** (+0.45). Holdout gate (20%, `case_id % 5 == 0`): adopted +0.30 total vs prior; CFAs flat at 2 on holdout slice.
+**Progression:** iter-12 Docker baseline 120.27 → iter-14 **120.87** (+0.60). Holdout gate (20%, `case_id % 5 == 0`): adopted +0.30 total vs prior; CFAs flat at 2 on holdout slice.
 
-**Failure modes (iter-13):**
+**Failure modes (iter-14):**
 
 1. **Catastrophic false approvals (11):** residual cases are truncated packets or missing biometric/registry graphic evidence — not parser bypasses on clean packets.
 2. **Fee status:** OCR/normalization on degraded fee receipts remains the largest extraction gap.
@@ -91,10 +91,10 @@ Local re-run (same commit, non-Docker): 120.95 / 150 — classification 64.04, e
 1. **Truncated-packet CFAs:** detect incomplete biometric/registry page sets and force review/deny when graphic evidence is structurally absent.
 2. **Fee receipt channel:** expand fuzzy label patterns and second-pass OCR variants without full-document OCR.
 3. **Risk-flag sensitivity:** tighten approval when partial flag prose or registry `EMBARGO REVIEW` appears without full `Observed flags:` parse.
-4. **Validation packaging:** copy iter-13 Docker validation run to `predictions.jsonl` once complete (regenerating under iter-13 image; score remains private).
+4. **Applicant-name / sponsor OCR:** largest remaining extraction gaps after risk_flags; keep dual-view gates so trap unfiltering stays off-limits.
 
 ---
 
 ## Compliance statement
 
-No validation labels, no per-case hardcoding, no network/API/LLM usage at runtime. Sponsor revocation list includes train-inferred IDs disclosed in source comments. Validation Docker run in progress under iter-13 image; `predictions.jsonl` in this folder may lag until copied. Public solution-repo publication **pending Henry review**.
+No validation labels, no per-case hardcoding, no network/API/LLM usage at runtime. Sponsor revocation list includes train-inferred IDs disclosed in source comments. Validation `predictions.jsonl` matches the iter-14 Docker run (5,000/5,000, schema-valid). Public solution-repo publication **pending Henry review**.

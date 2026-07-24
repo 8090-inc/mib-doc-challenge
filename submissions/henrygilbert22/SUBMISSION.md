@@ -23,13 +23,13 @@
 
 | Metric | Value |
 | --- | ---: |
-| Predictions | **5,000 / 5,000** (Docker run in progress) |
-| Throughput | TBD (prior iter-5 run: 0.957 s/PDF) |
-| Image size | **0.46 GiB** (iter-13 train) |
-| Peak container RAM | TBD |
+| Predictions | **5,000 / 5,000** |
+| Throughput | ~0.83–1.0 s/PDF class (train measured ~0.83) |
+| Image size | **0.46 GiB** |
+| Peak container RAM | ~1.3 GiB class (prior measured runs) |
 | Validation score | **Not reported** (private labels) |
 
-`predictions.jsonl` in this folder will be replaced once the iter-13 validation Docker run completes and passes `validate_submission.py --require-complete`.
+`predictions.jsonl` matches the iter-14 Docker validation run and passes `validate_submission.py --require-complete`.
 
 ## Reproduce validation predictions
 
@@ -66,4 +66,4 @@ python3 /path/to/mib-doc-challenge/scripts/validate_submission.py \
 
 ## Train proxy (public labels only)
 
-Full-train Docker eval (iteration 13, commit `7095051`): **120.72 / 150** — classification 63.91, extraction 41.77, calibration 15.04, 11 CFAs. Not a validation score.
+Full-train Docker eval (iteration 14, commit `a4e7482`): **120.87 / 150** — classification 64.03, extraction 41.79, calibration 15.05, 11 CFAs. Not a validation score.
