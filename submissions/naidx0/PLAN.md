@@ -52,8 +52,8 @@ stale arrival (>180 d before batch-max) on non-DIP-1 → DENIED; fee unknown or 
 NEEDS_REVIEW; review-only flags → NEEDS_REVIEW; cross-page contradictions → NEEDS_REVIEW; else
 APPROVED. Adjudicator-note findings and injection-text traps handled explicitly.
 
-## Local-later steps (not possible in the online mobile session)
-- Download the 2.88 GB public data zip (Hugging Face) and unzip to `data/`.
-- Generate `predictions.jsonl` for all 5,000 validation PDFs (≈ hours of OCR).
-- `docker build` + `run_docker_submission.py` full offline run under the scoring limits.
-These are documented in `submissions/naidx0/SUBMISSION.md`.
+## Reproduction
+- Download the public data archive and unzip to `data/`.
+- Build the image and generate `predictions.jsonl` for the 5,000 validation PDFs.
+- Verify with `run_docker_submission.py` under the offline scoring limits.
+Exact commands are in `submissions/naidx0/SUBMISSION.md`.
