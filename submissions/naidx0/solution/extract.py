@@ -17,6 +17,9 @@ LABEL_FIELDS = [
     ("sponsor id", "sponsor_id"),
     ("arrival date", "arrival_date"),
     ("declared purpose", "declared_purpose"),
+    # the compact scanned intake variant labels the same field just "Purpose",
+    # which is too far from "declared purpose" for the fuzzy label matcher
+    ("purpose", "declared_purpose"),
     ("fee status", "fee_status"),
     ("waiver code", "waiver_code"),
     ("amount", "amount"),
@@ -86,6 +89,14 @@ def split_vocab(species_vocab):
     return frozenset(species), frozenset(purposes), frozenset(names)
 
 
+# Declared purposes form a small closed pool and the value has already been
+# located behind a "Purpose" label, so the only question is WHICH pool member a
+# mangled read is -- not whether it is a purpose at all.  The acceptance ratio is
+# therefore low: a two-word purpose read through a bad scan ("reseter metaronce")
+# sits well under the usual 70s cut-off but is still unambiguous within the pool.
+_PURPOSE_MIN_RATIO = 60
+
+
 def _canon_purpose(value, purpose_vocab):
     """Snap an OCR'd declared purpose onto the batch-learned purpose set."""
     if not value or not purpose_vocab:
@@ -96,7 +107,7 @@ def _canon_purpose(value, purpose_vocab):
         score = fuzz.ratio(v, choice.lower())
         if score > best_score:
             best_score, best = score, choice
-    return best if best_score >= 72 else value
+    return best if best_score >= _PURPOSE_MIN_RATIO else value
 
 
 def _canon_name(value, name_vocab):
@@ -573,21 +584,44 @@ def _parse_narrative(text, fields, from_ocr):
     if re.search(r"waiver (?:confirmed|approved|granted|applies|valid)|hardship waiver|"
                  r"diplomatic waiver|waiver on file", text, re.I):
         fields[pref + "waiver_confirmed"] = "1"
-    # explicit in-document "Manual correction: sponsor is SPN-XXXX." annotation
-    # supersedes the printed Sponsor ID (which may be a stale / superseded value
-    # that coincidentally collides with the revoked set -> false denial).  Only
-    # honored from the trusted text layer, never from OCR.
+    # Explicit in-document "Manual correction: <field> is <value>." annotations.
+    # A signed manual note is the TOP of the field manual's trusted-evidence
+    # precedence, above the printed form fields, so the correction supersedes
+    # whatever the form said -- the printed value may be stale (a superseded
+    # sponsor id that collides with the revoked set -> false denial), or may
+    # belong to a second applicant whose pages were filed into the same packet.
+    # Only honored from the trusted text layer, never from OCR.
     if not from_ocr:
-        mcorr = re.search(r"correction[^\n]{0,30}?sponsor\s+is\s+(SPN[-\s]?\d{3,4})",
-                          text, re.I)
-        if mcorr:
-            fields["sponsor_corrected"] = mcorr.group(1)
+        for pattern, key in _CORRECTION_PATTERNS:
+            m = pattern.search(text)
+            if m:
+                fields[key] = m.group(1)
     # in-document sponsor-revoked signal
     if re.search(r"sponsor[^\n]{0,40}revoked|status\s*:\s*revoked", text, re.I):
         fields[pref + "sponsor_revoked_signal"] = "1"
     # registry embargo status
     if re.search(r"\bEMBARGO\b", text, re.I):
         fields[pref + "registry_embargo"] = "1"
+
+
+# "Manual correction: <subject> is <value>." -- (compiled pattern, aux key).
+# Each value pattern is deliberately narrow so the annotation can only supply a
+# well-formed value; whatever it yields still goes through the normal
+# canonicalizer before it is used.
+# Case-insensitivity is scoped to the ANNOUNCEMENT only: the applicant value
+# pattern relies on capitalisation to tell a name from the prose around it.
+_CORRECTION_PATTERNS = tuple(
+    (re.compile(r"(?i:correction[^\n]{0,30}?" + subject + r"\s+is\s+)" + value_re),
+     key)
+    for subject, value_re, key in (
+        (r"sponsor", r"(SPN[-\s]?\d{3,4})", "sponsor_corrected"),
+        (r"visa\s+class", r"([A-Za-z]{2,8}\s?-\s?\d)", "visa_corrected"),
+        (r"fee\s+status", r"([A-Za-z]{4,8})", "fee_corrected"),
+        (r"applicant",
+         r"([A-Z][A-Za-z'\-]{1,15}(?:\s+[A-Z][A-Za-z'\-]{1,15}){0,2})",
+         "applicant_corrected"),
+    )
+)
 
 
 # ---- cross-page merge --------------------------------------------------------
@@ -633,6 +667,8 @@ def collect_candidates(pages, species_vocab=frozenset(), world_vocab=frozenset()
            # provenance (C6/A4/A2): filled in resolve_fields
            "sponsor_id_trusted": False, "sponsor_corroborated": False,
            "home_world_trusted": False, "sponsor_corrected": None,
+           "applicant_corrected": None, "visa_corrected": None,
+           "fee_corrected": None,
            # --- evidence-quality signals (E-gate): captured for the positive
            # clean-flags approval gate.  Populated below / in resolve_fields.
            "n_pages": 0, "n_unknown_pages": 0, "n_ocr_pages": 0,
@@ -698,6 +734,9 @@ def collect_candidates(pages, species_vocab=frozenset(), world_vocab=frozenset()
                 # trusted text-layer correction supersedes the printed id
                 aux["sponsor_corrected"] = value
                 continue
+            if k in ("applicant_corrected", "visa_corrected", "fee_corrected"):
+                aux[k] = value
+                continue
             if k == "reg_name":
                 _add_candidate(cands, "applicant_name", value, "REGISTRY", from_ocr)
                 continue
@@ -726,6 +765,60 @@ def collect_candidates(pages, species_vocab=frozenset(), world_vocab=frozenset()
     return cands, aux
 
 
+def _consensus_name(candidates, name_vocab):
+    """Pick the applicant name the packet AGREES on.
+
+    Taking the highest-ranked form's read on its own loses whenever that page is
+    the most damaged one -- a garbled "Wiewvors Vests" on the intake form beat a
+    clean "Miravara Veeix" printed on two other pages of the same packet.  The
+    readings are therefore clustered by fuzzy identity (so OCR noise between two
+    renderings of the SAME name counts as agreement) and the cluster with the
+    most independent support wins; form precedence only chooses the wording
+    INSIDE the winning cluster.  With a single candidate this is exactly the old
+    behaviour.
+    """
+    ranks = FORM_RANK.get("applicant_name", {})
+    prepared = []
+    for value, form_type, from_ocr in candidates:
+        name = _clean_name(value)
+        if not name:
+            continue
+        if from_ocr:
+            name = _canon_name(_trim_name_tail(name), name_vocab)
+        if not name:
+            continue
+        prepared.append((name, form_type, bool(from_ocr)))
+    if not prepared:
+        return None
+    clusters = []
+    for item in prepared:
+        for members in clusters:
+            if fuzz.ratio(item[0].lower(), members[0][0].lower()) >= 80:
+                members.append(item)
+                break
+        else:
+            clusters.append([item])
+
+    def cluster_score(members):
+        # a text-layer reading is worth more than an OCR one; distinct form
+        # types (not repeated reads of one page) are what constitute support
+        by_ft = {}
+        for _name, ft, ocr in members:
+            by_ft[ft] = by_ft.get(ft, False) or not ocr
+        return (sum(3 if trusted else 1 for trusted in by_ft.values()), len(by_ft))
+
+    def cluster_key(members):
+        sc, ndistinct = cluster_score(members)
+        # deterministic: score, breadth, then the best member's rank, then text
+        best = max(members, key=lambda m: ((0 if m[2] else 100) + ranks.get(m[1], 0)))
+        return (sc, ndistinct, (0 if best[2] else 100) + ranks.get(best[1], 0),
+                best[0])
+
+    winner = max(clusters, key=cluster_key)
+    return max(winner, key=lambda m: ((0 if m[2] else 100) + ranks.get(m[1], 0),
+                                      m[0]))[0]
+
+
 def _best_candidate_full(field, candidates):
     """Like _best_candidate but returns the full (value, form_type, from_ocr)
     tuple so callers can inspect provenance (text-layer vs OCR)."""
@@ -747,11 +840,23 @@ def resolve_fields(pages, species_vocab, world_vocab):
 
     # applicant_name
     if "applicant_name" in cands:
-        best_name = _best_candidate_full("applicant_name", cands["applicant_name"])
-        name = _clean_name(best_name[0])
-        if name and best_name[2]:  # OCR source -> repair against learned tokens
-            name = _canon_name(name, name_vocab)
+        name = _consensus_name(cands["applicant_name"], name_vocab)
+        if name is None:
+            # every reading was damaged/empty -- fall back to plain precedence
+            best_name = _best_candidate_full("applicant_name",
+                                             cands["applicant_name"])
+            name = _clean_name(best_name[0])
+            if name and best_name[2]:  # OCR -> repair against learned tokens
+                name = _canon_name(name, name_vocab)
         out["applicant_name"] = name
+    # An explicit "Manual correction: applicant is X." annotation names the
+    # applicant attached to the active case id, so it supersedes whatever the
+    # printed field said (which may belong to a second applicant whose pages
+    # were filed into the same packet -- a documented trap).
+    if aux.get("applicant_corrected"):
+        corrected = _clean_name(aux["applicant_corrected"])
+        if corrected:
+            out["applicant_name"] = corrected
     # species
     if "species_code" in cands:
         raw = _best_candidate("species_code", cands["species_code"])
@@ -768,6 +873,10 @@ def resolve_fields(pages, species_vocab, world_vocab):
     # visa
     if "visa_class" in cands:
         out["visa_class"] = vocab.canon_visa(_best_candidate("visa_class", cands["visa_class"]))
+    if aux.get("visa_corrected"):
+        corrected = vocab.canon_visa(aux["visa_corrected"])
+        if corrected in vocab.VISA_CLASSES:
+            out["visa_class"] = corrected
     # sponsor
     if "sponsor_id" in cands:
         # prefer a text-layer (non-OCR) candidate; record provenance +
@@ -811,7 +920,7 @@ def resolve_fields(pages, species_vocab, world_vocab):
         if not _is_damaged(dp):
             dp = " ".join(dp.split())
             if best_dp[2]:  # OCR source -> snap onto the learned purpose set
-                dp = _canon_purpose(dp, purpose_vocab)
+                dp = _canon_purpose(_trim_purpose_tail(dp), purpose_vocab)
             out["declared_purpose"] = dp
     # fee status
     if "fee_status" in cands:
@@ -824,6 +933,10 @@ def resolve_fields(pages, species_vocab, world_vocab):
     # WAS read are unaffected (out["fee_status"] already set above).
     if aux.get("has_fee_page") and not out.get("fee_status"):
         out["fee_status"] = "unknown"
+    if aux.get("fee_corrected"):
+        corrected = vocab.canon_fee(aux["fee_corrected"])
+        if corrected in vocab.FEE_STATUSES:
+            out["fee_status"] = corrected
     # risk flags
     if "risk_flags" in cands:
         aux["flags_candidate_present"] = True
@@ -854,6 +967,19 @@ def resolve_fields(pages, species_vocab, world_vocab):
         # is clean, as opposed to us simply failing to find any flag.
         if out["risk_flags"] == "none" and none_like and r:
             aux["positive_clean_flags"] = True
+
+    # The biometric slip is not the only page that PRINTS the flag: an
+    # adjudicator note spells it out in its reason line ("Disqualifying risk
+    # flag: planetary_embargo"), and that note is often the one page of a
+    # degraded packet whose text layer survived.  When the slip itself gave us
+    # nothing readable, fall back to the flag the note states.
+    #
+    # This is a value READ off the document, not an inference, and it is only
+    # ever used to FILL an empty result -- it can never overwrite a slip we did
+    # read, and it can never turn an unreadable flags line into a clean "none"
+    # (aux["uncertain_flags"] set above is left standing either way).
+    if not out.get("risk_flags") and aux.get("note_flags", "none") != "none":
+        out["risk_flags"] = aux["note_flags"]
 
     # A Planetary Registry that explicitly reads "Registry Status: CLEAR" is an
     # independent positive clean attestation.
@@ -886,3 +1012,44 @@ def _clean_name(v):
     if _is_damaged(v):
         return ""
     return v
+
+
+def _trim_purpose_tail(value):
+    """Same OCR-debris trim as _trim_name_tail, for the declared purpose.
+
+    "Declared Purpose: research a a tN" is the right value plus the noise that
+    followed it on the scan line; left in place the debris drags the value below
+    the fuzzy threshold that would otherwise snap it onto the learned purpose
+    vocabulary.  Every purpose in the corpus is one to three ordinary words.
+    """
+    kept = []
+    for tok in value.split():
+        if not tok.isalpha() or len(tok) < 2:
+            break
+        kept.append(tok)
+        if len(kept) == 3:
+            break
+    return " ".join(kept) if kept else value
+
+
+def _trim_name_tail(name):
+    """Drop OCR debris that ran on past the end of the name.
+
+    A scanned intake line yields "Luix Tekvara - oasePORT" or "Miravoss Ixomora
+    on nce 1": the name is right, but neighbouring cell text and stamp fragments
+    were merged into it, and the exact-match scorer then rejects the whole
+    value.  An applicant name is one to three capitalised word tokens, so keep
+    the leading run that still looks like one (the first two tokens are accepted
+    regardless of case, because OCR routinely lower-cases a real name).
+    """
+    kept = []
+    for i, tok in enumerate(name.split()):
+        letters = sum(c.isalpha() for c in tok)
+        if letters < 2 or any(c.isdigit() for c in tok):
+            break
+        if i >= 2 and not tok[:1].isupper():
+            break
+        kept.append(tok)
+        if len(kept) == 3:
+            break
+    return " ".join(kept) if kept else name
