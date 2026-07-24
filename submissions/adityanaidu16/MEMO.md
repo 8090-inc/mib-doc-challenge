@@ -93,19 +93,12 @@ aborts the blank/decoy pages so they cost two passes, not five. Measured on
 OCR-dependent pages this lifted field recovery **78.5% → 80.0%** while *dropping*
 per-page time via the crop.
 
-## Results (5-fold cross-validated — the honest number)
+## Evaluation methodology
 
-| Section | Score |
-| --- | ---: |
-| Field extraction | 40.3 / 50 |
-| Classification | 63.8 / 80 |
-| Calibration | 15.2 / 20 (Brier 0.120) |
-| Missing-case penalty | 0.0 |
-| **Total** | **~119.3 / 150** |
-
-We report the cross-validated figure deliberately: fitting the residual model on
-all 1,000 packets and scoring in-sample inflates classification by ~10 points
-(memorisation), which would not survive the private test.
+We measure ourselves out-of-sample with 5-fold cross-validation: fitting the
+residual model on all 1,000 packets and scoring in-sample inflates classification
+by memorisation, which would not survive the private test. We leave the scoring
+of this submission to the official evaluator.
 
 ## Failure modes and what limits the score
 

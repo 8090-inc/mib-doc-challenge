@@ -29,9 +29,3 @@ docker run --rm --network none --cpus 4 --memory 8g --pids-limit 512 \
 Validated end-to-end under the exact scoring contract: builds offline, runs with
 no network, produces schema-valid predictions at ~1.3 s/PDF serial (5,000 PDFs
 well within the 30,000 s hard limit). Parallelism is opt-in via `MIB_WORKERS`.
-
-## Cross-validated score (training set)
-
-~119.3 / 150 — extraction 40.3, classification 63.8, calibration 15.2.
-Reported out-of-sample (5-fold CV); see `MEMO.md` for why the in-sample figure
-overstates classification.
