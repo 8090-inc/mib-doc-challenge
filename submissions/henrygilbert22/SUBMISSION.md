@@ -19,7 +19,7 @@
 | Measured image | 0.46 GiB uncompressed (iter-13 full eval) |
 | Measured throughput | ~0.83 s/PDF on 1,000 train PDFs |
 
-## Validation contract (iter-14 image)
+## Validation contract (iter-15 image)
 
 | Metric | Value |
 | --- | ---: |
@@ -29,7 +29,7 @@
 | Peak container RAM | ~1.3 GiB class (prior measured runs) |
 | Validation score | **Not reported** (private labels) |
 
-`predictions.jsonl` matches the iter-14 Docker validation run and passes `validate_submission.py --require-complete`.
+`predictions.jsonl` matches the iter-15 Docker validation run and passes `validate_submission.py --require-complete`.
 
 ## Reproduce validation predictions
 
@@ -60,10 +60,10 @@ python3 /path/to/mib-doc-challenge/scripts/validate_submission.py \
 
 | File | Purpose |
 | --- | --- |
-| `predictions.jsonl` | Validation predictions — **matches iter-14 Docker validation run (post TRANSIT embed OCR)** |
+| `predictions.jsonl` | Validation predictions — **matches iter-15 Docker validation run (post TRANSIT embed OCR)** |
 | `MEMO.md` | Technical memo (architecture, trust model, measured train results) |
 | `SUBMISSION.md` | This file |
 
 ## Train proxy (public labels only)
 
-Full-train Docker eval (iteration 14, commit `a4e7482`): **120.87 / 150** — classification 64.03, extraction 41.79, calibration 15.05, 11 CFAs. Not a validation score.
+Full-train Docker eval (iteration 14, commit `215bc56`): **121.18 / 150** — classification 64.1, extraction 42.0, calibration 15.08, 11 CFAs. Not a validation score.
