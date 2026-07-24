@@ -27,24 +27,43 @@ is drop it.
 **OCR only where needed.** A page whose visible text is footer-only gets
 rasterized at 200 DPI grayscale and read with Tesseract PSM 11 and 6. If key
 fields still resist, the page gets one 300 DPI escalation with two
-binarization thresholds. About 30% of pages are image-only; the rest never
-pay OCR cost, which keeps the run well inside the 6 s/PDF budget.
+binarization thresholds. Some biometric slips are printed sideways, which
+defeats orientation detection under the background noise, so a budgeted
+90/270 rotation pass probes stuck pages and reads cue-confirmed slips. Only
+positive flag tokens are accepted from a rotated read: recovering a literal
+"none" would defeat the uncertainty hedge that is correctly protecting cases
+whose denial evidence is unreadable. About 30% of pages are image-only; the
+rest never pay OCR cost, which keeps the run well inside the 6 s/PDF budget.
 
 **Closed vocabularies.** Every enum-ish field is fuzzy-snapped to its
 vocabulary, which turns most OCR noise into exact matches. Risk-flag tokens
 are scanned order-independently across the whole page, with a digit-repair
-fuzzy fallback for mangled reads. Applicant names pass through a 144-token
-vocabulary mined from the training labels, and a candidate survives only when
-exactly two tokens snap cleanly. The name-grammar filter and the `scan_flags`
-recovery are adapted from 8090's own MIT-licensed reference solution by
-thegoleffect; both sites carry attribution comments in `mib.py`.
+fuzzy fallback for mangled reads and a prose form ("prior denial stamp
+rescinded") for the one flag the generator writes as a sentence. Because
+risk_flags is set-valued and scored as set equality, its candidates are
+unioned across pages rather than resolved first-wins: an adjudicator note
+names only the disqualifying flag, and letting it outrank the slip's complete
+list silently drops co-occurring flags. Applicant names pass through a
+144-token vocabulary mined from the training labels; a candidate survives
+when exactly two tokens snap cleanly, a complete two-token name is preferred
+over a higher-ranked partial or doubled-token artifact, and novel names fall
+through unbroken. The name-grammar filter and the `scan_flags` recovery are
+adapted from 8090's own MIT-licensed reference solution by thegoleffect; both
+sites carry attribution comments in `mib.py`.
 
-**Statistical fallbacks, disclosed.** When a field is unrecoverable from the
-document, the pipeline emits the training-set mode (fee: paid, visa: DIP-1,
-world: Wolf-1061c, species: LUNA_SECURID, purpose: transit). These are priors
-rather than per-case reads, and they run strictly after adjudication so they
-can never influence a decision. An empty answer is a guaranteed miss under
-exact-match scoring; the mode is the best available guess.
+**Statistical fallbacks, disclosed.** Before any prior fires, an output-only
+scavenge pass re-mines every line the run has seen (native, OCR variants,
+rotated reads) for still-empty fields: looser label-anchored vocabulary
+voting for the enum fields, a digit-repaired anchor search for sponsor ids
+("msi 5809" recovers SPN-5809), and an in-window date vote for arrivals. Only
+when scavenging also comes up empty does the pipeline emit the training-set
+mode (fee: paid, visa: DIP-1, world: Wolf-1061c, species: LUNA_SECURID,
+purpose: transit). The fee prior additionally requires that no fee evidence
+was read at all: a positively-parsed "unknown" keeps its value, since that
+reading is usually the truth. All of this runs strictly after adjudication so
+it can never influence a decision. An empty answer is a guaranteed miss under
+exact-match scoring; a scavenged read beats the mode, and the mode beats a
+blank.
 
 **Measured evidence precedence.** Where sources conflict, the winner was
 measured on train rather than assumed: registry, then biometric, then sponsor
@@ -56,21 +75,25 @@ Bracketed damage sentinels like `[NAME CUT OUT]` are dropped, and printed
 correct (sponsor, visa class, applicant, fee status), at 100% on train.
 
 **Adjudication as a mined cascade**, first match wins. An adjudicator-note
-`Finding:` line decides outright (304/304 on train, including a fuzzy
-fallback that recovers OCR-garbled findings and rejects the SAMPLE DENIAL
-decoy). An unambiguous colored stamp decides next, trusted only on a
-recognized page type; conflicting stamps mean NEEDS_REVIEW (9/9). After that
-come the deny rules: disqualifying flags, TRANSIT-7, unpaid fee (DIP-1 is not
-exempt), a revoked
-sponsor (3 public plus 3 inferred) on a non-DIP visa, Wolf-1061c on a non-DIP
-visa, and stale arrival. Then the review gates: missing arrival, unknown fee,
+`Finding:` line decides outright (320/320 on train, including a fuzzy
+fallback that recovers OCR-garbled findings, a strict-only read that rescues
+notes whose damaged titles misclassify them as other page types, and a filter
+that rejects the SAMPLE DENIAL decoy). An unambiguous colored stamp decides
+next, trusted only on a recognized page type; conflicting stamps mean
+NEEDS_REVIEW. After that come the deny rules: disqualifying flags, TRANSIT-7,
+unpaid fee (DIP-1 is not exempt), a revoked sponsor (3 public plus 3
+inferred) on a non-DIP visa, Wolf-1061c on a non-DIP visa, stale arrival, and
+a junk-packet rule: world, sponsor, and flags all unrecovered plus an
+unreadable OCR page is denied rather than hedged (13/17 on train, positive in
+all five held-out folds, and deny-direction only, so it can never create a
+false approval). Then the review gates: missing arrival, unknown fee,
 review-only flags, unreadable flag evidence. Whatever passes everything is
 APPROVED. One evidence-signature exception lives inside the missing-arrival
 gate: a packet with the slip present, flags unread, and an unreadable OCR
-page runs 71% DENIED and 0% REVIEW on train, so it is denied rather than
-hedged. It is the only sub-signature flip that survived all 5 held-out
-splits. Embargo home worlds (TRAPPIST-1e, Eris Relay) imply
-`planetary_embargo` (50/50 on train).
+page was fit at 71% DENIED and 0% REVIEW, so it is denied rather than hedged;
+it survived all 5 held-out splits, and the junk-packet rule has since
+absorbed most of its population (the remainder runs 3/3 on train). Embargo home worlds (TRAPPIST-1e,
+Eris Relay) imply `planetary_embargo` (46/49 on train).
 
 Two inferences deserve honest flags. Staleness is an absolute cutoff
 (2026-01-02) standing in for the manual's relative 180-day rule, because
