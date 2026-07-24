@@ -36,6 +36,48 @@ HEADER_FOOTER_RE = re.compile(
 )
 
 
+# Distinctive field labels / phrases per form type, used to classify a degraded
+# scan whose TITLE line was mangled beyond recognition.  Getting form_type right
+# is upstream of everything else -- if we do not know a page is a B-13 we never
+# look for its "Observed flags" line.  Only cues that are long enough to be
+# unambiguous are listed (short ones like "Case ID" appear on every form).
+_FORM_CUES = {
+    "B13": ("biometric scan slip", "observed flags", "species match",
+            "biometric confidence"),
+    "I8090": ("work authorization intake", "declared purpose",
+              "primary intake record", "extraterrestrial work"),
+    "FEE": ("mib fee receipt", "fee status", "waiver code"),
+    "REGISTRY": ("planetary registry extract", "registry name",
+                 "registry status"),
+    "SPONSOR": ("sponsor attestation letter", "attests that",
+                "acknowledges responsibility"),
+    "NOTE": ("manual adjudicator note", "adjudicator"),
+}
+# fixed order -> deterministic tie-break
+_FORM_CUE_ITEMS = tuple(
+    (ft, tuple((c, re.sub(r"[^a-z]", "", c)) for c in cues))
+    for ft, cues in sorted(_FORM_CUES.items())
+)
+
+
+def _cue_form_type(blob):
+    """Classify a page by fuzzy-matching distinctive field labels."""
+    from rapidfuzz import fuzz as _fz
+    lines = [re.sub(r"[^a-z]", "", ln.lower()) for ln in blob.splitlines()]
+    lines = [ln for ln in lines if len(ln) >= 8]
+    if not lines:
+        return None
+    best_ft, best_hits = None, 0
+    for ft, cues in _FORM_CUE_ITEMS:
+        hits = 0
+        for _raw, key in cues:
+            if any(_fz.partial_ratio(key, ln) >= 86 for ln in lines):
+                hits += 1
+        if hits > best_hits:
+            best_hits, best_ft = hits, ft
+    return best_ft if best_hits >= 1 else None
+
+
 def _detect_form_type(text_join, ocr_join=""):
     blob = text_join + "\n" + ocr_join
     for ftype, needle in FORM_TITLES:
@@ -65,6 +107,10 @@ def _detect_form_type(text_join, ocr_join=""):
             bscore, best = sc, ftype
     if bscore >= 78:
         return best
+    # last resort: the title is gone, but the field labels still identify the form
+    cued = _cue_form_type(blob)
+    if cued:
+        return cued
     return "UNKNOWN"
 
 
@@ -98,6 +144,45 @@ def _content_len(spans):
 
 # ---- OCR ---------------------------------------------------------------------
 
+def _rescale(gray):
+    """Bring an embedded scan into tesseract's comfortable glyph-size range."""
+    h0 = gray.shape[0]
+    if h0 < 2200:
+        return cv2.resize(gray, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+    if h0 > 3600:
+        f = 3300.0 / h0
+        return cv2.resize(gray, None, fx=f, fy=f, interpolation=cv2.INTER_AREA)
+    return gray
+
+
+def _flatten(gray):
+    """Divide out the uneven illumination so faint body text pops."""
+    bg = cv2.morphologyEx(
+        gray, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+    )
+    return cv2.divide(gray, bg, scale=255)
+
+
+def _preprocess_plain(gray):
+    """Illumination-flattened Otsu binarisation, with NO line/blob surgery.
+
+    The aggressive variant below (`_preprocess`) strips ruled lines and stamp
+    blobs, but on the faintest scans its morphology and connected-component
+    filtering also eat the thin strokes of the body text, turning a legible
+    "biohazard_red" into "otc.cenrd_ped".  Keeping a plain binarisation in the
+    variant set recovers those pages.
+    """
+    norm = _flatten(_rescale(gray))
+    _, out = cv2.threshold(norm, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return out
+
+
+def _preprocess_norm(gray):
+    """Illumination-flattened GRAYSCALE (tesseract does its own thresholding).
+    Best on scans where any hard threshold breaks strokes apart."""
+    return _flatten(_rescale(gray))
+
+
 def _preprocess(gray):
     """Return a cleaned binary (black text on white) for a degraded scan.
 
@@ -107,18 +192,8 @@ def _preprocess(gray):
     the result, then remove the ruled-line / border-tick background via
     morphology and thicken broken strokes.
     """
-    # upscale small embedded scans so glyphs are large enough for tesseract
-    h0 = gray.shape[0]
-    if h0 < 2200:
-        gray = cv2.resize(gray, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
-    elif h0 > 3600:
-        f = 3300.0 / h0
-        gray = cv2.resize(gray, None, fx=f, fy=f, interpolation=cv2.INTER_AREA)
-
-    bg = cv2.morphologyEx(
-        gray, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
-    )
-    norm = cv2.divide(gray, bg, scale=255)
+    gray = _rescale(gray)
+    norm = _flatten(gray)
     _, mask = cv2.threshold(norm, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
     horiz = cv2.morphologyEx(
@@ -146,22 +221,99 @@ def _preprocess(gray):
     return 255 - txt
 
 
-def _ocr_image(pil_gray, page_rotation=0):
-    arr = np.array(pil_gray)
-    clean = _preprocess(arr)
+def _text_axis(clean):
+    """(horizontal_runs, vertical_runs) on a cleaned binary (white bg).
+
+    Printed text lines close up into long HORIZONTAL runs when the page is
+    upright and into long VERTICAL runs when the scan is 90/270-rotated, so the
+    two counts tell us which axis the glyph baselines run along.  Used only to
+    order the rotation retries, never to accept/reject a value.
+    """
+    txt = 255 - clean
+    out = []
+    for horiz in (True, False):
+        k = (25, 1) if horiz else (1, 25)
+        m = cv2.morphologyEx(txt, cv2.MORPH_CLOSE,
+                             cv2.getStructuringElement(cv2.MORPH_RECT, k))
+        n, _lab, stats, _ = cv2.connectedComponentsWithStats(m, 8)
+        if n <= 1:
+            out.append(0)
+            continue
+        w = stats[1:, cv2.CC_STAT_WIDTH]
+        h = stats[1:, cv2.CC_STAT_HEIGHT]
+        if horiz:
+            out.append(int(np.sum((w > 90) & (h < 45))))
+        else:
+            out.append(int(np.sum((h > 90) & (w < 45))))
+    return out[0], out[1]
+
+
+def _tess(img, psm):
     try:
-        best_text = pytesseract.image_to_string(clean, config="--psm 6")
+        return pytesseract.image_to_string(img, config="--psm %d" % psm)
     except Exception:
-        best_text = ""
-    best_score = _ocr_quality(best_text)
-    # psm 4 fallback only when psm 6 looks weak
-    if best_score < 4:
-        try:
-            txt = pytesseract.image_to_string(clean, config="--psm 4")
-        except Exception:
-            txt = ""
+        return ""
+
+
+# Preprocessing variants, cheapest-and-usually-best first.  We stop as soon as a
+# variant reads enough form labels to be trusted, so a clean scan still costs a
+# single OCR pass and only the genuinely hard pages pay for the retries.
+_VARIANT_FUNCS = (_preprocess_plain, _preprocess, _preprocess_norm)
+_GOOD_ENOUGH = 4
+
+
+def _ocr_variants(arr):
+    """Best (text, score) over the preprocessing variants, plus the binary of
+    the first variant (reused for orientation detection)."""
+    best_text, best_score, best_clean, first_clean = "", 0, None, None
+    for fn in _VARIANT_FUNCS:
+        clean = fn(arr)
+        if first_clean is None:
+            first_clean = clean
+        txt = _tess(clean, 6)
+        score = _ocr_quality(txt)
+        if score > best_score or best_clean is None:
+            best_text, best_score, best_clean = txt, score, clean
+        if best_score >= _GOOD_ENOUGH:
+            break
+    # single-column psm 4 fallback on the winning variant only
+    if best_score < _GOOD_ENOUGH:
+        txt = _tess(best_clean, 4)
         if _ocr_quality(txt) > best_score:
             best_text, best_score = txt, _ocr_quality(txt)
+    return best_text, best_score, first_clean
+
+
+def _ocr_image(pil_gray, page_rotation=0):
+    """OCR a degraded page scan.
+
+    Two failure modes are handled here.  (1) A sizeable minority of the scans
+    are stored 90/180/270 rotated (the PDF /Rotate is 0, so the rotation is
+    baked into the raster) and tesseract returns pure noise on those.  (2) No
+    single binarisation suits every scan, so several are tried and the one that
+    yields the most recognisable form labels wins.  Orientation is probed with
+    the cheap variant only; the full variant set is then spent on the winning
+    orientation.
+    """
+    arr = np.array(pil_gray)
+    best_text, best_score, first_clean = _ocr_variants(arr)
+    if best_score == 0:
+        h_runs, v_runs = _text_axis(first_clean)
+        order = (1, 3, 2) if v_runs > h_runs else (2, 1, 3)
+        best_k = None
+        for k in order:
+            rot = np.ascontiguousarray(np.rot90(arr, k))
+            txt = _tess(_preprocess_plain(rot), 6)
+            score = _ocr_quality(txt)
+            if score > best_score:
+                best_text, best_score, best_k = txt, score, k
+            if best_score >= 3:
+                break
+        if best_k is not None and best_score < _GOOD_ENOUGH:
+            rot = np.ascontiguousarray(np.rot90(arr, best_k))
+            txt, score, _ = _ocr_variants(rot)
+            if score > best_score:
+                best_text, best_score = txt, score
     return best_text
 
 
@@ -262,18 +414,30 @@ def _case_id_from_name(path):
     return "MIB-" + m.group(1) if m else ""
 
 
+_PURPOSE_RE = re.compile(r"[A-Za-z][A-Za-z \-]{2,31}")
+_NAME_RE = re.compile(r"[A-Z][A-Za-z'\-]{2,15}(?: [A-Z][A-Za-z'\-]{2,15}){1,2}")
+
+
 def quick_text_layer_values(path):
-    """Fast pass (no OCR): return clean species/home_world values from text
-    layers to build the batch vocabulary."""
+    """Fast pass (no OCR): harvest clean enum values from text layers to build
+    the batch vocabulary.
+
+    Returns (species_set, world_set).  declared_purpose values and applicant
+    name tokens ride along inside the species set behind the private prefixes
+    from extract.py (solution.py owns this call's 2-tuple contract and is not
+    ours to change); extract.split_vocab separates them again.
+    """
     species, worlds = set(), set()
     try:
         doc = fitz.open(path)
     except Exception:
         return species, worlds
+    # local imports to avoid a cycle at module load
+    from extract import (VOCAB_NAME_PREFIX, VOCAB_PURPOSE_PREFIX, _is_damaged,
+                         parse_page_fields)
     for page in doc:
         pw, ph = page.rect.width, page.rect.height
         spans = _trusted_text_spans(page, pw, ph)
-        from extract import parse_page_fields  # local import to avoid cycle at module load
         fields = parse_page_fields({"form_type": _detect_form_type(
             "\n".join(s["text"] for s in spans)), "text_spans": spans,
             "ocr_lines": [], "from_ocr": False})
@@ -284,5 +448,16 @@ def quick_text_layer_values(path):
         w = fields.get("home_world")
         if w and 2 <= len(w.strip()) <= 20 and not w.strip().startswith("["):
             worlds.add(w.strip())
+        p = fields.get("declared_purpose")
+        if p:
+            p = " ".join(p.split())
+            if _PURPOSE_RE.fullmatch(p) and not _is_damaged(p):
+                species.add(VOCAB_PURPOSE_PREFIX + p)
+        n = fields.get("applicant_name")
+        if n:
+            n = " ".join(n.split())
+            if _NAME_RE.fullmatch(n) and not _is_damaged(n):
+                for tok in n.split():
+                    species.add(VOCAB_NAME_PREFIX + tok)
     doc.close()
     return species, worlds

@@ -61,6 +61,258 @@ def _center_y(bbox):
     return (bbox[1] + bbox[3]) / 2.0
 
 
+# ---- batch-learned vocabularies ---------------------------------------------
+#
+# declared_purpose and the applicant name tokens are drawn from small closed
+# pools, exactly like species_code / home_world, so an OCR'd value can be
+# snapped back onto the set of values observed in CLEAN text layers elsewhere in
+# the batch.  solution.py owns the vocabulary plumbing and is not ours to
+# change, so these extra vocabularies travel inside the species set behind a
+# private prefix and are split back out here.
+VOCAB_PURPOSE_PREFIX = "\x01P"
+VOCAB_NAME_PREFIX = "\x01N"
+
+
+def split_vocab(species_vocab):
+    """(species, declared_purposes, name_tokens) from the packed species set."""
+    species, purposes, names = set(), set(), set()
+    for value in species_vocab:
+        if value.startswith(VOCAB_PURPOSE_PREFIX):
+            purposes.add(value[len(VOCAB_PURPOSE_PREFIX):])
+        elif value.startswith(VOCAB_NAME_PREFIX):
+            names.add(value[len(VOCAB_NAME_PREFIX):])
+        else:
+            species.add(value)
+    return frozenset(species), frozenset(purposes), frozenset(names)
+
+
+def _canon_purpose(value, purpose_vocab):
+    """Snap an OCR'd declared purpose onto the batch-learned purpose set."""
+    if not value or not purpose_vocab:
+        return value
+    v = " ".join(value.split()).lower()
+    best, best_score = None, 0
+    for choice in sorted(purpose_vocab):  # sorted -> deterministic tie-break
+        score = fuzz.ratio(v, choice.lower())
+        if score > best_score:
+            best_score, best = score, choice
+    return best if best_score >= 72 else value
+
+
+def _canon_name(value, name_vocab):
+    """Repair an OCR'd applicant name token-by-token against the learned name
+    tokens.  A token is only replaced on an unambiguous win (high score AND a
+    clear margin over the runner-up), so a genuinely unseen name is left alone
+    rather than snapped onto some other applicant's name."""
+    if not value or not name_vocab:
+        return value
+    choices = sorted(name_vocab)
+    out = []
+    for token in value.split():
+        core = re.sub(r"[^A-Za-z]", "", token)
+        if token in name_vocab or len(core) < 4:
+            out.append(token)
+            continue
+        best, best_score, runner_up = None, 0, 0
+        for choice in choices:
+            score = fuzz.ratio(core.lower(), choice.lower())
+            if score > best_score:
+                runner_up = best_score
+                best_score, best = score, choice
+            elif score > runner_up:
+                runner_up = score
+        if best is not None and best_score >= 80 and best_score - runner_up >= 6:
+            out.append(best)
+        else:
+            out.append(token)
+    return " ".join(out)
+
+
+# ---- OCR line -> (label, value) ---------------------------------------------
+#
+# On a degraded scan the label/value separator is routinely lost ("Fee Status
+# Paig") and the label itself is mangled ("Species Mitac ALPHA_DRAGEETAN"), so
+# the plain 'split on ":"' path recovers nothing.  The helpers below recover the
+# same evidence by fuzzy-matching the leading words of a line against the known
+# label vocabulary.  They never invent a value: whatever follows the label is
+# passed through verbatim to the normal canonicalizers.
+
+# Page furniture (stamps / watermarks) that OCR merges into a field value
+# ("Applicant: Qorix Arivara CASEWORK").  Never part of a real value.
+_STAMP_PHRASES = [
+    "casework", "copy artifact", "duplicate", "eyes only", "mib eyes only",
+    "passport image", "primary intake record", "registry image", "sample denial",
+    "scan image", "scan tab", "specimen image",
+    "synthetic hiring challenge document",
+]
+_STAMP_KEYS = sorted({_norm_label(p) for p in _STAMP_PHRASES})
+_STAMP_MAXWORDS = max(len(p.split()) for p in _STAMP_PHRASES)
+
+
+def _strip_stamps(value):
+    """Remove stamp/watermark words OCR merged into a field value."""
+    words = value.split()
+    n = len(words)
+    if not n:
+        return ""
+    drop = [False] * n
+    for i in range(n):
+        for ln in range(1, _STAMP_MAXWORDS + 1):
+            if i + ln > n:
+                break
+            frag = _norm_label(" ".join(words[i:i + ln]))
+            if len(frag) < 7:
+                continue
+            if any(fuzz.ratio(frag, k) >= 85 for k in _STAMP_KEYS):
+                for j in range(i, i + ln):
+                    drop[j] = True
+                break
+    kept = [w for j, w in enumerate(words) if not drop[j]]
+    return " ".join(kept).strip(" |*_-.,;:'\"()[]")
+
+
+def _fuzzy_label(frag, threshold):
+    """Best internal field for a normalized label fragment, or None."""
+    best_field, best_score = None, 0
+    for key, field in _NORM_LABEL_KEYS:
+        sc = fuzz.ratio(frag, key)
+        if sc > best_score:
+            best_score, best_field = sc, field
+    return best_field if best_score >= threshold else None
+
+
+def _ocr_label_value(line):
+    """Parse one OCR line into (field, value); (None, None) if it is not a
+    'label [:] value' line.  Shorter label prefixes are tried first so that a
+    longer prefix can never swallow the value itself."""
+    if ":" in line:
+        left, right = line.split(":", 1)
+        field = _match_label(left, fuzzy=True)
+        if field and right.strip():
+            return field, right.strip()
+    words = line.split()
+    for n in (1, 2, 3):
+        if len(words) <= n:
+            break
+        frag = _norm_label(" ".join(words[:n]))
+        if len(frag) < 6:
+            continue
+        field = _fuzzy_label(frag, 82)
+        if field:
+            value = " ".join(words[n:]).strip()
+            if value:
+                return field, value
+    return None, None
+
+
+def _ocr_bare_label(line):
+    """Field for a line that is JUST a label (stacked layout), else None."""
+    t = line.strip().rstrip(":").strip()
+    if not t or len(t.split()) > 3 or len(t) > 26:
+        return None
+    frag = _norm_label(t)
+    if len(frag) < 6:
+        return None
+    return _fuzzy_label(frag, 85)
+
+
+def _ocr_value_accepted(field, value, species_vocab, world_vocab):
+    """Gate an OCR label/value read for the strongly-typed fields.
+
+    The label pass and the value-spotting pass write to the SAME key and the
+    first writer wins, so an unusable label read ("Sponsor ID: 5°N-@71") would
+    otherwise shadow a good value recovered by the pattern scan later on the
+    same page.  For fields whose value space is closed (or a strict pattern) we
+    therefore only accept a read that actually canonicalizes; anything else is
+    dropped so another pass or another page can supply the value.  Free-text
+    fields (name, purpose, flags, waiver code) are accepted as-is.
+    """
+    if field == "sponsor_id":
+        return bool(vocab.canon_sponsor(value))
+    if field == "arrival_date":
+        return bool(vocab.canon_date(value))
+    if field == "fee_status":
+        return vocab.canon_fee(value) in vocab.FEE_STATUSES
+    if field == "visa_class":
+        return vocab.canon_visa(value) in vocab.VISA_CLASSES
+    if field == "species_code":
+        known = set(vocab.SPECIES_SEED) | set(species_vocab)
+        return vocab.canon_species(value, species_vocab) in known
+    if field == "home_world":
+        known = set(vocab.HOME_WORLD_SEED) | set(world_vocab)
+        return vocab.canon_home_world(value, world_vocab) in known
+    return True
+
+
+# Words a biometric slip uses to attest that NO flags were observed.
+_NONE_WORDS = ("na", "nil", "none", "null")
+
+
+def _reads_as_none(raw):
+    """True iff an observed-flags value is a (possibly OCR-mangled) "none".
+
+    Recovering the "none" reading is what lets a genuinely clean packet be
+    approved, so this must never fire on a mangled REAL flag -- that would be a
+    catastrophic false approval.  The guard is length: the shortest canonical
+    risk flag is 14 characters ("active_warrant"), and OCR garbles characters
+    rather than deleting two thirds of them, so a value that survives as <= 7
+    alphanumerics cannot be a mangled flag name.  Within that length budget a
+    single-character misread of "none" ("nore", "hone", "n0ne") still scores 75.
+    """
+    s = re.sub(r"[^a-z0-9]", "", str(raw).strip().lower())
+    if not s:
+        return True
+    if len(s) > 7:
+        return False
+    return max(fuzz.ratio(s, w) for w in _NONE_WORDS) >= 70
+
+
+def _rescue_flag_token(chunk):
+    """Recover a badly OCR-mangled risk-flag name from one value chunk.
+
+    Reached only for text the strict canonicaliser rejected, on a line that
+    clearly carried SOME flag (long, not none-like).  Naming a flag can only
+    make the decision more conservative -- deny or review, never approve -- so a
+    wrong guess here cannot manufacture a false approval; the real cost is a
+    wrong risk_flags value, hence the demand for a clear winner.  Length
+    agreement is used as an independent cue because OCR substitutes characters
+    far more often than it inserts or deletes them.
+    """
+    s = re.sub(r"[^a-z]", "", str(chunk).lower())
+    if len(s) < 8:
+        return None
+    best, best_score, runner_up = None, 0.0, 0.0
+    for flag in vocab.RISK_FLAGS:  # fixed list -> deterministic iteration
+        key = flag.replace("_", "")
+        score = fuzz.ratio(s, key) - 2.0 * abs(len(s) - len(key))
+        if score > best_score:
+            runner_up = best_score
+            best_score, best = score, flag
+        elif score > runner_up:
+            runner_up = score
+    if best is not None and best_score >= 45 and best_score - runner_up >= 10:
+        return best
+    return None
+
+
+def _rescue_flags(raw):
+    """canon_flags for OCR text the strict matcher could not resolve."""
+    found = set()
+    for chunk in re.split(r"[|,;/]+|\s{2,}", str(raw)):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        got = vocab.canon_flag_token(chunk) or _rescue_flag_token(chunk)
+        if got:
+            found.add(got)
+    if not found:
+        # the separators may themselves have been lost -- try the whole line
+        got = _rescue_flag_token(raw)
+        if got:
+            found.add(got)
+    return "|".join(sorted(found)) if found else "none"
+
+
 def parse_page_fields(page, species_vocab=frozenset(), world_vocab=frozenset()):
     """Return {internal_field: value} parsed from one page's trusted evidence."""
     fields = {}
@@ -116,14 +368,30 @@ def parse_page_fields(page, species_vocab=frozenset(), world_vocab=frozenset()):
     _parse_narrative(text_join, fields, from_ocr=False)
 
     # --- OCR lines ---
-    ocr_join = "\n".join(page.get("ocr_lines", []))
+    ocr_lines = page.get("ocr_lines", [])
+    ocr_join = "\n".join(ocr_lines)
     if ocr_join:
-        for ln in page.get("ocr_lines", []):
-            if ":" in ln:
-                left, right = ln.split(":", 1)
-                field = _match_label(left, fuzzy=True)
-                if field and right.strip():
-                    fields.setdefault("ocr::" + field, right.strip())
+        pending_label = None
+        for ln in ocr_lines:
+            field, value = _ocr_label_value(ln)
+            if field and value:
+                pending_label = None
+                value = _strip_stamps(value)
+                if value and _ocr_value_accepted(field, value, species_vocab,
+                                                 world_vocab):
+                    fields.setdefault("ocr::" + field, value)
+                continue
+            bare = _ocr_bare_label(ln)
+            if bare:
+                # stacked layout: the value is on the following line
+                pending_label = bare
+                continue
+            if pending_label:
+                value = _strip_stamps(ln.strip())
+                if value and _ocr_value_accepted(pending_label, value,
+                                                 species_vocab, world_vocab):
+                    fields.setdefault("ocr::" + pending_label, value)
+                pending_label = None
         _parse_narrative(ocr_join, fields, from_ocr=True)
         # value-spotting: scan OCR text directly against known vocabularies,
         # scoped by form type -- robust to mangled OCR labels.
@@ -473,12 +741,17 @@ def _best_candidate(field, candidates):
 
 
 def resolve_fields(pages, species_vocab, world_vocab):
+    species_vocab, purpose_vocab, name_vocab = split_vocab(species_vocab)
     cands, aux = collect_candidates(pages, species_vocab, world_vocab)
     out = {}
 
     # applicant_name
     if "applicant_name" in cands:
-        out["applicant_name"] = _clean_name(_best_candidate("applicant_name", cands["applicant_name"]))
+        best_name = _best_candidate_full("applicant_name", cands["applicant_name"])
+        name = _clean_name(best_name[0])
+        if name and best_name[2]:  # OCR source -> repair against learned tokens
+            name = _canon_name(name, name_vocab)
+        out["applicant_name"] = name
     # species
     if "species_code" in cands:
         raw = _best_candidate("species_code", cands["species_code"])
@@ -533,9 +806,13 @@ def resolve_fields(pages, species_vocab, world_vocab):
                 break
     # declared purpose
     if "declared_purpose" in cands:
-        dp = _best_candidate("declared_purpose", cands["declared_purpose"])
+        best_dp = _best_candidate_full("declared_purpose", cands["declared_purpose"])
+        dp = best_dp[0]
         if not _is_damaged(dp):
-            out["declared_purpose"] = " ".join(dp.split())
+            dp = " ".join(dp.split())
+            if best_dp[2]:  # OCR source -> snap onto the learned purpose set
+                dp = _canon_purpose(dp, purpose_vocab)
+            out["declared_purpose"] = dp
     # fee status
     if "fee_status" in cands:
         fee_val = vocab.canon_fee(_best_candidate("fee_status", cands["fee_status"]))
@@ -558,9 +835,20 @@ def resolve_fields(pages, species_vocab, world_vocab):
         # (non-empty, not "none", but nothing canonicalizes) is a red flag: we
         # cannot rule out a disqualifier -> force review, not approval.
         r = str(raw).strip().lower()
-        none_like = (not r) or re.fullmatch(r"(none|null|n/?a|-|\.)+", r) is not None
-        if out["risk_flags"] == "none" and not none_like and len(r) >= 4:
-            aux["uncertain_flags"] = True
+        none_like = ((not r) or re.fullmatch(r"(none|null|n/?a|-|\.)+", r) is not None
+                     or _reads_as_none(r))
+        if out["risk_flags"] == "none" and not none_like:
+            # The slip listed something we could not resolve strictly.  Try the
+            # OCR-tolerant matcher before giving up; if that also fails, keep
+            # "none" but mark the packet uncertain so it cannot be approved.
+            rescued = _rescue_flags(raw)
+            if rescued != "none":
+                out["risk_flags"] = rescued
+            else:
+                # NEVER let an unreadable flags line pass as a clean "none" --
+                # that is a false-clean assertion and a false-approval vector.
+                out["risk_flags"] = ""
+                aux["uncertain_flags"] = True
         # POSITIVE clean-flags attestation: a trusted source EXPLICITLY read
         # "none" (not merely absent/empty).  This is the evidence that a packet
         # is clean, as opposed to us simply failing to find any flag.
