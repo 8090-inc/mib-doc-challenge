@@ -7,13 +7,18 @@ records and an `APPROVED` / `DENIED` / `NEEDS_REVIEW` decision with calibrated c
 VLM, or network at runtime — only Tesseract OCR, classical image processing, and a rules engine whose
 policy was reverse-engineered from the public training labels and verified against the real documents.
 
-On a stratified, edge-case-weighted 145-PDF labeled subset of the training set, the deterministic
-scorer reports **121.3 / 150** (classification 65.8 / 80, extraction 39.9 / 50, calibration 15.6 / 20)
-with **zero catastrophic false approvals** and ~0.6 s/PDF — an order of magnitude under the 6 s budget.
-The subset over-samples adversarial and damaged packets, so it is a deliberately pessimistic proxy for
-the full validation set. Output is byte-identical across runs, passes the official
-`validate_submission.py`, and is locked by a regression suite covering the injection, forged-note,
-unreadable-page, and placeholder cases.
+On the **full 1,000-case training set**, the deterministic scorer reports **112.3 / 150**
+(classification 59.0 / 80, extraction 39.9 / 50, calibration 13.9 / 20) with **3 catastrophic false
+approvals (0.3%)** and ~0.6 s/PDF — an order of magnitude under the 6 s budget. Output is byte-identical
+across runs, passes the official `validate_submission.py`, and is locked by a regression suite covering
+the injection, forged-note, unreadable-page, and placeholder cases.
+
+An early build measured 121 on a 145-PDF edge-case subset with zero catastrophic approvals, but the
+full set exposed 22 catastrophic false approvals — the pipeline was treating "no risk flag read" as
+"flags = none (clean)" and approving packets whose disqualifier sat on a missing or unreadable page.
+Adding an **evidence-quality approval gate** (APPROVED requires a *positively read* clean-flags
+attestation; otherwise NEEDS_REVIEW) cut that to 3. The lesson — measure on the whole distribution, not
+a convenient sample — is baked into the current numbers above.
 
 ## Approach
 
@@ -57,9 +62,13 @@ directly serves the Brier-based calibration score and reinforces the anti-false-
   image-only scans and intentionally destroyed fields (torn visa class, obscured fee, illegible
   biometrics). These are the unrecoverable/trap cases; the private scorer removes genuinely
   unrecoverable fields from the maximum, so the visible gap overstates the real loss.
-- **APPROVE ↔ REVIEW boundary.** The system is deliberately conservative: it sends some true approvals
-  to review (costly but safe) rather than risk approving a packet whose disqualifier it could not read.
-  Zero catastrophic false approvals is treated as the hard constraint.
+- **Over-review is the dominant score ceiling.** On the full training set, ~210 of ~290 true approvals
+  are routed to NEEDS_REVIEW — almost entirely because a field could not be read off a degraded scan
+  (missing arrival date, unreadable fee, no positively-read clean-flags attestation), not because the
+  policy is wrong. This is a deliberate safety trade: reviewing an unread packet scores +2 on a true
+  denial versus −4 for a false approval. The lever to raise the score is therefore better *reading*
+  (OCR/extraction), not looser policy — improving OCR would convert many of these reviews back to
+  correct approvals without touching the catastrophic count.
 - **Learned policy constants.** The revoked-sponsor set and embargo signals are general policy tables
   learned from the training distribution, not per-case lookups; they assume the private test shares the
   same policy world (a different set of revoked ids would need the in-document revocation signal, which
