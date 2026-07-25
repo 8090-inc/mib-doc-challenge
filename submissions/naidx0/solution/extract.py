@@ -759,7 +759,15 @@ def collect_candidates(pages, species_vocab=frozenset(), world_vocab=frozenset()
                 aux["registry_status"].append(value)
                 _add_candidate(cands, "registry_status", value, ft, from_ocr)
                 continue
-            if k in ("amount", "biometric_conf", "case_id"):
+            if k == "amount":
+                # The receipt's amount corroborates the fee status when the
+                # status word itself is unreadable: the fee is a fixed charge, so
+                # a non-zero amount means it was paid and a zero amount means it
+                # was waived.  Stored only as a fallback; a directly-read status
+                # always wins.
+                aux.setdefault("fee_amounts", []).append(value)
+                continue
+            if k in ("biometric_conf", "case_id"):
                 continue
             _add_candidate(cands, k, value, ft, from_ocr)
     return cands, aux
@@ -927,6 +935,24 @@ def resolve_fields(pages, species_vocab, world_vocab):
         fee_val = vocab.canon_fee(_best_candidate("fee_status", cands["fee_status"]))
         if fee_val in ("paid", "waived", "unpaid", "unknown"):
             out["fee_status"] = fee_val
+    # The receipt's Amount corroborates the status when the status word itself
+    # was destroyed.  The charge is fixed, so a non-zero amount means the fee was
+    # paid and a zero amount means it was waived.  This only fires when nothing
+    # was read directly -- a legible status always wins -- and it never invents
+    # "unpaid", which is a denial trigger.
+    if not out.get("fee_status"):
+        for raw_amt in aux.get("fee_amounts", []):
+            m = re.search(r"(\d[\d,]*)(?:\.(\d{2}))?", str(raw_amt))
+            if not m:
+                continue
+            whole = m.group(1).replace(",", "")
+            cents = m.group(2) or "00"
+            if not whole.isdigit():
+                continue
+            total = int(whole) * 100 + int(cents)
+            out["fee_status"] = "waived" if total == 0 else "paid"
+            aux["fee_from_amount"] = True
+            break
     # C2a: a fee-receipt page is PRESENT but its status could not be read ->
     # treat the fee as "unknown" (both for output and adjudication) rather than
     # silently letting it fall through to an APPROVAL.  Clean cases where the fee
