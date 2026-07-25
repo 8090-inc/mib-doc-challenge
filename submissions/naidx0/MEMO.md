@@ -7,18 +7,20 @@ records and an `APPROVED` / `DENIED` / `NEEDS_REVIEW` decision with calibrated c
 VLM, or network at runtime — only Tesseract OCR, classical image processing, and a rules engine whose
 policy was reverse-engineered from the public training labels and verified against the real documents.
 
-On the **full 1,000-case training set**, the deterministic scorer reports **112.3 / 150**
-(classification 59.0 / 80, extraction 39.9 / 50, calibration 13.9 / 20) with **3 catastrophic false
-approvals (0.3%)** and ~0.6 s/PDF — an order of magnitude under the 6 s budget. Output is byte-identical
-across runs, passes the official `validate_submission.py`, and is locked by a regression suite covering
-the injection, forged-note, unreadable-page, and placeholder cases.
+On the **full 1,000-case training set**, the deterministic scorer reports **123.06 / 150**
+(classification 64.46 / 80, extraction 42.69 / 50, calibration 15.91 / 20, mean Brier 0.1022) with
+**2 catastrophic false approvals** and ~4.5 CPU-seconds per PDF, inside the 6 s budget. Output is
+byte-identical across runs, passes the official `validate_submission.py`, and is locked by a regression
+suite covering the injection, forged-note, unreadable-page, and placeholder cases.
 
-An early build measured 121 on a 145-PDF edge-case subset with zero catastrophic approvals, but the
-full set exposed 22 catastrophic false approvals — the pipeline was treating "no risk flag read" as
-"flags = none (clean)" and approving packets whose disqualifier sat on a missing or unreadable page.
-Adding an **evidence-quality approval gate** (APPROVED requires a *positively read* clean-flags
-attestation; otherwise NEEDS_REVIEW) cut that to 3. The lesson — measure on the whole distribution, not
-a convenient sample — is baked into the current numbers above.
+The path there was 112.27 → 116.63 → 121.74 → 123.06, and the first number is the instructive one.
+An early build measured 121 on a 145-PDF edge-case subset with zero catastrophic approvals; the full
+set then exposed **22 catastrophic false approvals**. The pipeline was treating "no risk flag read" as
+"flags = none (clean)" and approving packets whose disqualifier sat on a missing or unreadable page —
+absence of evidence read as evidence of absence. An **evidence-quality approval gate** (approval
+requires a *positively read* clean-flags attestation, else `NEEDS_REVIEW`) cut that to 3, and
+corroboration-based approval took it to 2 while *raising* classification. The lesson — measure on the
+whole distribution, never a convenient sample — shaped everything after it.
 
 ## Approach
 
@@ -50,7 +52,14 @@ unpaid fee without a visible waiver → DENIED; stale arrival date (>180 days be
 reference) on a non-DIP-1 visa → DENIED; unknown fee, missing arrival date, review-only flags, or
 cross-page contradictions → NEEDS_REVIEW; otherwise APPROVED. A signed adjudicator note, when present,
 overrides — but an OCR-derived note may only deny, never approve, so a garbled note can't manufacture a
-catastrophic approval.
+catastrophic approval, and no note can override a visible disqualifying flag.
+
+Approval itself requires *positive* evidence rather than the mere absence of a disqualifier: either a
+clean-flags attestation actually read off a biometric slip, or cross-source corroboration — the core
+identity fields printed identically on two independent form types, registry status CLEAR, a fee that
+was genuinely read, and no degraded page that could be hiding something. Mining the labels for policy
+structure also corrected the embargo table: `Eris Relay` and `TRAPPIST-1e` are embargoed for every visa
+class, while `Wolf-1061c` denies only non-DIP-1.
 
 **5. Calibrated confidence.** Each rule emits a confidence tuned to its empirical accuracy on the
 labeled corpus, so confidence approximates P(decision correct); the pipeline never emits 0.99. This
@@ -62,13 +71,22 @@ directly serves the Brier-based calibration score and reinforces the anti-false-
   image-only scans and intentionally destroyed fields (torn visa class, obscured fee, illegible
   biometrics). These are the unrecoverable/trap cases; the private scorer removes genuinely
   unrecoverable fields from the maximum, so the visible gap overstates the real loss.
-- **Over-review is the dominant score ceiling.** On the full training set, ~210 of ~290 true approvals
-  are routed to NEEDS_REVIEW — almost entirely because a field could not be read off a degraded scan
-  (missing arrival date, unreadable fee, no positively-read clean-flags attestation), not because the
-  policy is wrong. This is a deliberate safety trade: reviewing an unread packet scores +2 on a true
-  denial versus −4 for a false approval. The lever to raise the score is therefore better *reading*
-  (OCR/extraction), not looser policy — improving OCR would convert many of these reviews back to
-  correct approvals without touching the catastrophic count.
+- **Over-review is the dominant score ceiling.** 159 of ~290 true approvals are routed to NEEDS_REVIEW,
+  almost entirely because a field could not be read off a degraded scan, not because the policy is
+  wrong. This is a deliberate trade: reviewing an unread packet scores +2 on a true denial versus −4 for
+  a false approval.
+- **The decision logic is not the bottleneck — the inputs are.** Replaying the rule set against the
+  *true* field values scores **78.11 / 80** on classification (289/289 approvals and 431/431 denials
+  correct), so essentially all remaining classification headroom is extraction quality. The residual
+  ~1.9 points are cases that are truly `NEEDS_REVIEW` for reasons no field value encodes — the packet
+  was smudged, torn, or self-contradictory.
+- **Most missing risk flags are not on the page.** Backward error attribution over the 243 `risk_flags`
+  misses: 214 are not printed anywhere in the document (they are conditions such as `sponsor_mismatch`
+  or `rescinded_denial`, or evidence that was deliberately destroyed — several packets literally read
+  `Observed flags: [RISK PANEL MISSING]`), 27 sit on an adjudicator-note page, and only 2 are on a
+  genuinely misclassified page. Better OCR alone therefore cannot close this gap; and because those
+  destroyed fields are excluded from the private scorer's maximum, the true extraction score is likely
+  somewhat better than the local number suggests.
 - **Learned policy constants.** The revoked-sponsor set and embargo signals are general policy tables
   learned from the training distribution, not per-case lookups; they assume the private test shares the
   same policy world (a different set of revoked ids would need the in-document revocation signal, which
@@ -76,14 +94,24 @@ directly serves the Brier-based calibration score and reinforces the anti-false-
 
 ## What I'd do with another week
 
-- Train a small, offline field-localizer (a lightweight layout/box detector) to crop each label's
-  value region before OCR, instead of whole-page OCR — the single biggest lever on extraction accuracy.
+- **Read from pixels only.** The pipeline currently trusts the PDF text layer when it is clean and
+  falls back to OCR otherwise, which means two code paths and a precedence layer between them. Reading
+  every page from a bounded-resolution raster instead would collapse that to one path and make
+  prompt injection *structurally* impossible rather than filtered — hidden white text simply does not
+  appear in a render. These are crisp synthetic PDFs, so rendered pages OCR nearly losslessly; I would
+  measure this before committing to it, but I expect it to be the single biggest architectural win.
+- **Treat closed-vocabulary fields as classification, not transcription.** `risk_flags` has nine legal
+  values and `fee_status` four, in a known font at a fixed layout. Deciding which of nine candidates a
+  smudge is — by template correlation against rendered candidates, or a small trained classifier over
+  the field region (well inside the 250 MiB artifact limit) — is a far easier problem than reading
+  arbitrary characters, and degrades more gracefully.
+- **Separate output values from decision values.** A wrong field and a missing field both score zero,
+  so emitting a best guess for every field is free upside — provided the guess is never allowed to
+  reach the adjudicator, where an invented fee or flag would be exactly how false approvals return.
 - Add a per-field confidence model and propagate it into the record-level confidence and the
-  review/approve boundary, so the system abstains exactly where it is unsure.
-- Learn the adjudication thresholds (stale window, waiver logic, MED-3 biohazard rule) on the full
-  1,000-case training set with cross-validation rather than hand-tuning, and add a held-out check to
-  quantify generalization to unseen layout variants.
-- Harden OCR with an ensemble of preprocessing variants and a voting scheme for the enum fields.
+  review/approve boundary, so the system abstains precisely where it is unsure.
+- Learn the adjudication thresholds (stale window, waiver logic, MED-3 biohazard rule) with
+  cross-validation rather than hand-tuning, plus a held-out check for generalization to unseen layouts.
 
 ## Reproducibility
 
