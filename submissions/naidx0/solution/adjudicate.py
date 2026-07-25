@@ -316,7 +316,12 @@ def adjudicate(fields, aux, cands, ref_date, use_embargo=False):
     # the fee page was present but unreadable, and roughly half of those packets
     # turn out to be genuine reviews.)
     if fee == "unknown":
-        return "NEEDS_REVIEW", 0.56, "fee_unknown"
+        # An unreadable or explicitly-unknown fee is itself a reliable review
+        # marker: across the full training set, gold fee_status == "unknown"
+        # maps to NEEDS_REVIEW in 44/44 cases, and even our imprecise reads of
+        # "unknown" (some of which are gold paid/waived) still land on
+        # NEEDS_REVIEW.  The old 0.56 badly understated that.
+        return "NEEDS_REVIEW", 0.86, "fee_unknown"
 
     # 8. Missing / unreadable arrival date (field manual: mark NEEDS_REVIEW).
     if not arrival:
