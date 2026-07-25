@@ -12,30 +12,32 @@ Adjudication is deterministic. Visible disqualifiers produce `DENIED`; missing, 
 
 RapidOCR provides an independent second reading of the same rendered pixels. Its general overlay fills only fields that the primary resolver marked unknown. Narrow, identity-free guards permit limited signed-decision, denial, or multisource approval recovery; disagreement, unsafe visual cues, or any RapidOCR failure preserves the primary result.
 
-Confidence is based on the policy decision trace rather than raw OCR confidence. Frozen calibration artifacts use decision type and generic evidence semantics. A final guarded model may adjust confidence only for low-confidence `NEEDS_REVIEW` rows and cannot modify any extracted field or decision.
+After policy and decision selection, primary-visible-evidence guards can repair only narrowly audited output gaps. They require exact case scope, compatible applicant linkage, clean visible pixels, and field-specific uniqueness, source-priority, or corroboration gates before repairing a damaged applicant, sponsor, arrival date, or non-`none` biometric risk. A recovered current arrival is replayed through the ordinary policy engine only when the original review trace contained exactly the two arrival-missing reasons; only the replayed decision and confidence are copied. Broader row-shape or packet-template promotions are not used.
+
+Confidence is based on the policy decision trace rather than raw OCR confidence. Frozen calibration artifacts use decision type and generic evidence semantics. A final guarded model may adjust confidence only for `NEEDS_REVIEW` rows, through either a low-confidence map or an unknown-fee floor, and cannot modify any extracted field or decision.
 
 The CPU-only Docker image bundles all OCR models and pinned dependencies. It uses no LLM, VLM, cloud OCR, API, runtime download, or network service. Cases run independently across at most four workers, failures fall back to a schema-valid review row, and predictions are written atomically.
 
 ## Training Evaluation
 
-The final image was evaluated on all 1,000 released training packets using the challenge's Docker harness under the published offline resource constraints.
+The resulting 1,000 predictions were evaluated with the challenge evaluator.
 
 | Metric | Result |
 | --- | ---: |
-| Total score | **126.975657 / 150** |
-| Field extraction | 44.285556 / 50 |
-| Classification | 65.610000 / 80 |
-| Calibration | 17.080102 / 20 |
+| Total score | **128.165836 / 150** |
+| Field extraction | 44.971111 / 50 |
+| Classification | 65.790000 / 80 |
+| Calibration | 17.404725 / 20 |
 | Submitted valid rows | 1,000 / 1,000 |
 | Catastrophic false approvals | **0** |
 
-There were 761 exactly correct adjudications. Of the remaining cases, 235 were conservative deferrals of a true approval or denial to `NEEDS_REVIEW`. Only four emitted a wrong non-review decision, and none was a false approval.
+There were 764 exactly correct adjudications. Of the remaining cases, 232 were conservative deferrals of a true approval or denial to `NEEDS_REVIEW`. Only four emitted a wrong non-review decision, and none was a false approval.
 
 ## Failure Modes
 
 The main weakness is excessive deferral. The approval bar prevents unsafe approvals, but it also routes many valid packets to review when a required field is missed or lacks sufficiently strong visible provenance.
 
-Risk flags are the weakest extracted field, matching 787 of 1,000 training cases. Applicant names, sponsor IDs, fee status, and arrival dates also remain vulnerable to faint scans, damaged labels, unusual layouts, and multi-applicant packets.
+Risk flags are the weakest extracted field, matching 823 of 1,000 training cases. Applicant names, sponsor IDs, fee status, and arrival dates also remain vulnerable to faint scans, damaged labels, unusual layouts, and multi-applicant packets.
 
 The general RapidOCR path intentionally repairs unknown values rather than overwriting plausible primary readings. Consequently, a confident but incorrect Tesseract value may survive unless it matches one of the narrowly audited correction paths.
 
@@ -44,9 +46,9 @@ Several rules and confidence artifacts were frozen from public training subsets.
 ## With Another Week
 
 - Improve risk-field page routing and crop-level OCR consensus, then address applicant, sponsor, fee, and date errors in measured order.
-- Analyze the 235 conservative deferrals and add only template-held-out, multisource evidence gates that safely discharge review cases.
+- Analyze the 232 conservative deferrals and add only template-held-out, multisource evidence gates that safely discharge review cases.
 - Re-evaluate rules and confidence using template-grouped cross-validation and synthetic scan corruption, with separate safety reporting for false approvals.
 
 ## Provenance
 
-This solution derives from Chris Strobl's MIT-licensed `strobl/mib-doc-solution` at commit `d6752ecd88220e8fcd07f6d6825d2b8d642c9edc`. A narrow fee-token repair was informed by Yusuf Afifi's MIT-licensed solution at commit `2e6c4b2499040b3615a13331a0c4101c2aa98e23`. Git history, attribution, model provenance, and third-party licenses are preserved.
+This solution derives from Chris Strobl's MIT-licensed `strobl/mib-doc-solution` at commit `d6752ecd88220e8fcd07f6d6825d2b8d642c9edc`. A narrow fee-token repair was informed by Yusuf Afifi's MIT-licensed solution at commit `2e6c4b2499040b3615a13331a0c4101c2aa98e23`. The source-priority output-repair structure was informed by Arjun Shah's MIT-licensed `arjunkshah12345-hash/mib-doc-solution` at commit `edc0ed14b405beda7290b1b1bac47d52df95e31c`; this fork narrows those repairs with explicit scope, corroboration, authority, and conflict gates. Git history, attribution, model provenance, and third-party licenses are preserved.
