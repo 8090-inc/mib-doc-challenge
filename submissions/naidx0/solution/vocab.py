@@ -147,6 +147,23 @@ def canon_flag_token(tok):
     best2 = process.extractOne(t, RISK_FLAGS, scorer=fuzz.token_sort_ratio)
     if best2 and best2[1] >= 82:
         return best2[0]
+    # Closed-vocabulary rescue.  The eight flag names are mutually distant --
+    # the most similar PAIR scores only 42.4 -- so a read scoring well above
+    # that against its best match cannot be closer to a different flag.  A
+    # degraded scan yields things like "Bohazond_yed" (72 vs biohazard_red)
+    # that the thresholds above reject even though they are unambiguous.
+    # Accepting them down to 62 keeps a 20-point margin over the confusability
+    # ceiling, so this can never substitute one flag for another.
+    #
+    # The residual risk is matching OCR noise that is not a flag at all, which
+    # would invent a disqualifier and wrongly DENY.  Two guards: the token must
+    # be long enough to be a flag name at all, and the margin over the
+    # runner-up must be decisive.  Note this can only ever add denial signals,
+    # so it cannot cause a catastrophic false approval.
+    if best and len(t) >= 9 and best[1] >= 62:
+        ranked = process.extract(t, RISK_FLAGS, scorer=fuzz.ratio, limit=2)
+        if len(ranked) < 2 or (ranked[0][1] - ranked[1][1]) >= 12:
+            return best[0]
     return None
 
 
