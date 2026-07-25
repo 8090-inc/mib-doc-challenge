@@ -46,9 +46,10 @@ python3 scripts/run_docker_submission.py \
 
 ## Runtime characteristics
 
-- Fully offline (`--network none`), CPU-only, deterministic.
-- ~0.6 s/PDF on 4 vCPU — well under the 6 s/PDF budget.
-- Image well under the 4 GiB limit; no model artifacts beyond the Tesseract system package.
+- Fully offline (`--network none`), CPU-only, deterministic (byte-identical across runs).
+- ~4.5 CPU-seconds per PDF on 4 vCPU — inside the 6 s/PDF budget.
+- Image ~1.1 GiB, well under the 4 GiB limit; no model artifacts beyond the Tesseract system package.
+- Scores 123.06 / 150 on the full 1,000-case public training set with 2 catastrophic false approvals.
 
 ## Notes on `predictions.jsonl`
 
