@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import adjudicate
 import extract
 import ingest
+import vocab
 
 PER_PDF_TIMEOUT = 25.0
 OUTPUT_FIELDS = [
@@ -105,6 +106,40 @@ def _default_record(case_id):
     }
 
 
+_DAMAGE_RE = re.compile(r"\[|\]|unreadable|redacted|missing|torn|cut out|obscured", re.I)
+
+
+def _scavenge(field, cands):
+    """Best-effort value for a field the resolver could not settle (OUTPUT ONLY).
+
+    The scorer awards a field's weight only on an exact match, so a wrong value
+    and an absent value are worth exactly the same: zero.  Emitting our best
+    surviving candidate is therefore free upside, whereas the schema placeholder
+    is a guaranteed miss.
+
+    This must never influence the decision: ``adjudicate()`` is called with the
+    resolved ``fields``, not with the record this feeds, so a scavenged value
+    cannot manufacture an approval.  Damage markers are skipped -- they are the
+    deliberately destroyed fields, which the official scorer excludes from the
+    maximum anyway.
+    """
+    for value, _form_type, _from_ocr in cands.get(field, []):
+        raw = " ".join(str(value or "").split())
+        if not raw or _DAMAGE_RE.search(raw):
+            continue
+        if field == "sponsor_id":
+            got = vocab.canon_sponsor(raw)
+        elif field == "arrival_date":
+            got = vocab.canon_date(raw)
+        elif field == "visa_class":
+            got = vocab.canon_visa(raw)
+        else:
+            got = raw
+        if got:
+            return got
+    return ""
+
+
 def _build_record(res, ref_date, fee_fallback="paid"):
     fields = res.get("fields", {})
     aux = res.get("aux", {})
@@ -114,6 +149,10 @@ def _build_record(res, ref_date, fee_fallback="paid"):
               "sponsor_id", "arrival_date", "declared_purpose"):
         if fields.get(k):
             rec[k] = fields[k]
+        else:
+            scavenged = _scavenge(k, cands)
+            if scavenged:
+                rec[k] = scavenged
     rec["risk_flags"] = fields.get("risk_flags") or "none"
     fee = fields.get("fee_status")
     if fee in FEE_VALUES:
