@@ -50,9 +50,8 @@ also recover fee status when the status word is damaged. A final one-way
 postcondition checks the emitted fields before confidence calibration:
 disqualifying risks, revoked non-diplomatic sponsors, transit classes, stale
 dates, and unpaid fees force denial, while review flags and unresolved core
-evidence without a trusted manual finding can only demote an approval to review.
-Thus output-only estimates cannot leave a decision that contradicts the
-serialized row.
+evidence can only demote an approval to review. Thus output-only estimates
+cannot leave a decision that contradicts the serialized row.
 The output-boundary idea was inspired by the public MIT-licensed
 `OUTPUT_ONLY_FALLBACKS` design in Abhishek Enaguthi's challenge solution;
 `ATTRIBUTION.md` in my solution repository records the source and the
@@ -74,16 +73,16 @@ or model-selection feedback. The pipeline contains no per-case lookup table and
 does not use filenames for anything beyond the required case ID.
 
 On five-fold out-of-fold public training predictions, the selected policy
-achieved 73.5% adjudication accuracy, 62.82/80 classification points,
-15.09/20 calibration points (mean Brier 0.1226), and five catastrophic false
+achieved 71.4% adjudication accuracy, 61.56/80 classification points,
+15.16/20 calibration points (mean Brier 0.1209), and five catastrophic false
 approvals. Emitted field accuracy is 94.0% species, 90.7% home world, 90.7%
 purpose, 89.0% visa class, 83.6% arrival date, 82.9% sponsor ID, and 82.8% fee
 status, for 42.53/50 extraction points. The combined development OOF estimate
-is 120.44/150. Because blend and threshold selection use these OOF predictions,
+is 119.25/150. Because blend and threshold selection use these OOF predictions,
 this is still a development estimate rather than an untouched final audit.
 
-The fitted full-data integration evaluation scores 135.41/150
-(43.81 extraction, 74.09 classification, 17.51 calibration) with zero false
+The fitted full-data integration evaluation scores 134.52/150
+(43.81 extraction, 72.83 classification, 17.87 calibration) with zero false
 approvals. I report that only as an end-to-end sanity check, not as evidence of
 generalization.
 
