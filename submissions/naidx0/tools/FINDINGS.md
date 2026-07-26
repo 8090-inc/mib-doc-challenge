@@ -121,6 +121,35 @@ Correlating the truth against every boolean the pipeline computes found no
 predictor of `illegible_biometrics` above 0.44 against a 0.20 base rate --
 i.e. "the slip was unreadable" is genuinely not what that flag records.
 
+## Higher-resolution OCR: real, but not reachable within the time budget
+
+The embedded page scans are 1224x1584 -- about 144 dpi against a letter page --
+which `_rescale` doubles to roughly 288.  Reading the 80 worst-extracting
+packets at a larger scale genuinely helps:
+
+| scale | fields recovered (of 720) | weighted |
+|---|---|---|
+| x2.0 (current) | 246 | 0.3739 |
+| x2.5 | 260 | 0.3911 |
+| x3.0 | 263 | 0.3936 |
+
+Two things kill it.  First, those 80 packets are 8% of the corpus, so even the
+full x3.0 gain is worth roughly a tenth of a point overall.  Second, and
+decisively, the scans cap out at 3600px, so "x3.0" is really x2.27 -- and
+applying it to every page raises the per-PDF cost against a **6 second hard
+limit** that the pipeline currently meets at ~4.5s.
+
+The obvious fix -- escalate resolution only for pages that already failed every
+cheaper variant -- was implemented and **measured worse**: 245 of 720 fields
+(against 246 at baseline) at **9.31 s/PDF**.  It gained nothing because the
+retry re-runs a single preprocessing variant on exactly the pages where that
+variant had already failed, while costing a full extra OCR pass on every hard
+page.  The blanket version works only because it changes the primary read for
+all variants.
+
+Reverted.  Resolution is a real lever on these scans, but not one that fits
+inside the time budget for a tenth of a point.
+
 ## Calibration is close to its floor
 
 For a rule that fires on a group with true accuracy `p`, emitting confidence
