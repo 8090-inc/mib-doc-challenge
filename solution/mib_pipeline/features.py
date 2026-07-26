@@ -57,6 +57,28 @@ def build_features(d: dict) -> dict:
     f["wolf_non_dip"] = 1.0 if (values.get("home_world") == "Wolf-1061c"
                                 and values.get("visa_class") != "DIP-1") else 0.0
     f["revoked_sponsor"] = 1.0 if values.get("sponsor_id") in vocab.REVOKED_SPONSORS else 0.0
+    # Staleness margin in days relative to the batch clock (negative = fresh).
+    from datetime import date
+    stale_days = 0.0
+    arrival = values.get("arrival_date")
+    clock = d.get("clock")
+    if arrival and clock:
+        try:
+            stale_days = float((date.fromisoformat(clock)
+                                - date.fromisoformat(arrival)).days - 180)
+        except ValueError:
+            stale_days = 0.0
+    f["stale_margin_days"] = max(-400.0, min(400.0, stale_days))
+    status = (d.get("special") or {}).get("registry_status") or ""
+    f["registry_clear"] = 1.0 if "CLEAR" in status else 0.0
+    f["registry_embargo"] = 1.0 if "EMBARGO" in status else 0.0
+    f["registry_other"] = 1.0 if status and "CLEAR" not in status and "EMBARGO" not in status else 0.0
+    f["n_letter_names"] = float(len((d.get("special") or {}).get("letter_names") or []))
+    fee_page_conf = 0.0
+    for p in (d.get("page_details") or []):
+        if p.get("type") == "fee_receipt":
+            fee_page_conf = max(fee_page_conf, p.get("conf", 0.0))
+    f["fee_page_conf"] = fee_page_conf
     return f
 
 

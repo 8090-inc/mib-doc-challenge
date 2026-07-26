@@ -45,8 +45,8 @@ def export_forest(clf, feature_names):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--debug", default="dev/run5_debug.jsonl")
-    ap.add_argument("--trees", type=int, default=300)
-    ap.add_argument("--depth", type=int, default=12)
+    ap.add_argument("--trees", type=int, default=400)
+    ap.add_argument("--depth", type=int, default=14)
     args = ap.parse_args()
 
     truth = {r["case_id"]: r for r in

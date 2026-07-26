@@ -397,6 +397,8 @@ def debug_info(case: dict, all_cases) -> dict:
         "special": case.get("special"),
         "stamps": case.get("stamps"),
         "page_types": case.get("page_types"),
+        "page_details": case.get("page_details"),
+        "flag_conf": case.get("flag_conf"),
         "damage": round(case.get("damage", 0), 3),
         "ocr_pages": case.get("ocr_pages"),
         "trap": case.get("trap_detected"),
