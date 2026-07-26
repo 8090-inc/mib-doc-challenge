@@ -138,18 +138,36 @@ def deskew(img: np.ndarray, angle: float) -> np.ndarray:
                           borderMode=cv2.BORDER_REPLICATE)
 
 
-def enhance(img: np.ndarray) -> np.ndarray:
-    out = img
-    # Low contrast (fax/washout): stretch with CLAHE.
-    if out.std() < 40:
-        out = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(out)
-    # Speckle: light median filter when salt-and-pepper noise is high.
-    binary = (out < 128).astype(np.uint8)
+def _stretch(img: np.ndarray, p_lo: float = 0.5, p_hi: float = 90.0) -> np.ndarray:
+    lo, hi = np.percentile(img, [p_lo, p_hi])
+    if hi - lo < 5:
+        return img
+    out = np.clip((img.astype(np.float32) - lo) * 255.0 / (hi - lo), 0, 255)
+    return out.astype(np.uint8)
+
+
+def enhance_variants(img: np.ndarray):
+    """Candidate enhancements, cheapest/most-likely-good first. OCR keeps the
+    best-scoring variant, so a bad transform can only cost time, not accuracy."""
+    yield "raw", img
+    if img.std() < 45:
+        yield "stretch", _stretch(img)
+        if img.mean() > 225:
+            # Washed-out pages: keep only the darkest ink and drop the
+            # (lighter) ruling lines and haze entirely.
+            for pct in (0.8, 1.6):
+                th = np.percentile(img, pct)
+                mask = (img <= th).astype(np.uint8) * 255
+                mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE,
+                                        np.ones((2, 2), np.uint8))
+                if 0.001 < mask.mean() / 255.0 < 0.2:
+                    yield f"dark_p{pct}", 255 - mask
+        yield "clahe", cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(img)
+    binary = (img < 128).astype(np.uint8)
     speckle = cv2.countNonZero(cv2.morphologyEx(
         binary, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8)) ^ binary)
     if speckle > 0.02 * binary.size:
-        out = cv2.medianBlur(out, 3)
-    return out
+        yield "median", cv2.medianBlur(img, 3)
 
 
 def ocr_page(doc, page_index: int, dpi: int = 200, allow_escalation: bool = True,
@@ -160,11 +178,22 @@ def ocr_page(doc, page_index: int, dpi: int = 200, allow_escalation: bool = True
     img = rotate_image(img, rotation)
     skew = estimate_skew(img)
     img = deskew(img, skew)
-    img = enhance(img)
 
-    tsv, _ = _run_tesseract(img, psm=6, timeout=min(20.0, max(5.0, time_left())))
-    words = _parse_tsv(tsv)
-    conf = _mean_conf(words)
+    words, conf = [], 0.0
+    best_img = img
+    for variant_name, candidate in enhance_variants(img):
+        tsv, _ = _run_tesseract(candidate, psm=6,
+                                timeout=min(20.0, max(5.0, time_left())))
+        vwords = _parse_tsv(tsv)
+        vconf = _mean_conf(vwords)
+        score = vconf * (1 + 0.02 * len(vwords))
+        if score > conf * (1 + 0.02 * len(words)):
+            words, conf, best_img = vwords, vconf, candidate
+        if conf >= 70 and len(words) >= 15:
+            break
+        if time_left() < 8:
+            break
+    img = best_img
     escalated = False
 
     # 4-way rotation rescue when OSD failed and the page reads as garbage.
@@ -183,17 +212,24 @@ def ocr_page(doc, page_index: int, dpi: int = 200, allow_escalation: bool = True
             words = _parse_tsv(tsv)
             conf = _mean_conf(words)
 
-    # Escalation: re-render at 300 DPI with block-of-text PSM.
-    if allow_escalation and (conf < 55 or len(words) < 30) and time_left() > 25:
+    # Escalation: re-render at 300 DPI, best-of-variants with block PSM.
+    if allow_escalation and (conf < 55 or len(words) < 30) and time_left() > 20:
         img2 = render_page(doc, page_index, 300)
         img2 = rotate_image(img2, rotation)
         img2 = deskew(img2, estimate_skew(img2))
-        img2 = enhance(img2)
-        tsv2, _ = _run_tesseract(img2, psm=4, timeout=min(25.0, max(5.0, time_left())))
-        words2 = _parse_tsv(tsv2)
-        if _mean_conf(words2) > conf or len(words2) > len(words) * 1.3:
-            words, conf = words2, _mean_conf(words2)
-            dpi, escalated = 300, True
+        for variant_name, candidate in enhance_variants(img2):
+            if time_left() < 6:
+                break
+            tsv2, _ = _run_tesseract(candidate, psm=4,
+                                     timeout=min(25.0, max(5.0, time_left())))
+            words2 = _parse_tsv(tsv2)
+            vconf = _mean_conf(words2)
+            if (vconf * (1 + 0.02 * len(words2))
+                    > conf * (1 + 0.02 * len(words))):
+                words, conf = words2, vconf
+                dpi, escalated = 300, True
+            if conf >= 70 and len(words) >= 15:
+                break
 
     text = " ".join(w[0] for w in words)
     return OcrResult(text=text, words=words, mean_conf=conf,

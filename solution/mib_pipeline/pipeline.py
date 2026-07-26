@@ -14,7 +14,7 @@ from . import evidence as evidence_mod
 from . import vocab
 from .extract import (Token, extract_fields, parse_adjudicator_note,
                       parse_bio_confidence, parse_date, parse_registry_status,
-                      parse_sponsor_letter)
+                      parse_sponsor_letter, vocab_sweep)
 from .ocr import ocr_page
 from .pdfio import harvest
 from .rules import CaseBelief, cascade, ev_decide
@@ -22,7 +22,7 @@ from .stamps import read_note_text, read_stamps
 
 PER_PDF_BUDGET_S = 25.0
 # Bump when extract_case output semantics change (dev cache key).
-EXTRACT_VERSION = 4
+EXTRACT_VERSION = 8
 
 # Output fill-ins for unreadable fields (train-label modes). These are
 # submission guesses only - adjudication beliefs never consume them.
@@ -178,6 +178,9 @@ def extract_case(pdf_path: Path) -> dict:
                     stamp_events.append((ev.kind, page_type, page.index))
 
             fields = extract_fields(tokens, page.index, channel, channel_conf)
+            swept = vocab_sweep(tokens, page.index, channel, channel_conf)
+            for field_name, vals in swept.items():
+                fields.setdefault(field_name, []).extend(vals)
             for field_name, vals in fields.items():
                 for val in vals:
                     val.page_type = page_type
@@ -327,14 +330,35 @@ def finalize_case(case: dict, all_cases) -> dict:
     clock = batch_receipt_clock(all_cases)
     belief = belief_from_case(case, clock)
     adjudication, reason = cascade(belief)
-
-    base = REASON_CONF.get(reason.split(":")[0], 0.85)
     values, confs = case["values"], case["confs"]
-    evidence_quality = min(1.0, (confs.get("visa_class", 0.3)
-                                 + confs.get("fee_status", 0.3)
-                                 + case.get("flag_conf", 0.3)) / 2.2 + 0.25)
-    confidence = max(0.3, base * (0.55 + 0.45 * evidence_quality)
-                     * (1.0 - 0.35 * case.get("damage", 0.0)))
+
+    from . import model_runtime
+    from .features import FORCED, build_features
+    from .rules import ev_utility
+    if model_runtime.available():
+        record = dict(case)
+        record["reason"] = reason
+        record["belief_flags"] = sorted(belief.risk_flags)
+        p_a, p_d, p_r = model_runtime.predict_proba(build_features(record))
+        base_reason = reason.split(":")[0]
+        if base_reason in FORCED:
+            adjudication = FORCED[base_reason]
+            p_raw = {"APPROVED": p_a, "DENIED": p_d,
+                     "NEEDS_REVIEW": p_r}[adjudication]
+            p_raw = max(p_raw, 0.5)
+        else:
+            adjudication = max(("APPROVED", "DENIED", "NEEDS_REVIEW"),
+                               key=lambda a: ev_utility(a, p_a, p_d, p_r))
+            p_raw = {"APPROVED": p_a, "DENIED": p_d,
+                     "NEEDS_REVIEW": p_r}[adjudication]
+        confidence = model_runtime.calibrate(p_raw)
+    else:
+        base = REASON_CONF.get(reason.split(":")[0], 0.85)
+        evidence_quality = min(1.0, (confs.get("visa_class", 0.3)
+                                     + confs.get("fee_status", 0.3)
+                                     + case.get("flag_conf", 0.3)) / 2.2 + 0.25)
+        confidence = max(0.3, base * (0.55 + 0.45 * evidence_quality)
+                         * (1.0 - 0.35 * case.get("damage", 0.0)))
 
     row = {"case_id": case["case_id"]}
     flags = set(case.get("flags", []))

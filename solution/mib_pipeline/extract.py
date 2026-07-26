@@ -294,7 +294,8 @@ def extract_fields(tokens, page_index: int, source: str, channel_conf: float = 1
     """
     lines = group_lines(tokens)
     out = {}
-    for field_name, value_tokens, anchor_score, _ in find_anchored_values(lines):
+    anchor_min = 82.0 if source == "text" else 75.0
+    for field_name, value_tokens, anchor_score, _ in find_anchored_values(lines, min_score=anchor_min):
         raw = " ".join(t.text for t in value_tokens)
         # snapping value text: only use tokens up to the next anchor-ish gap
         value, conf = parse_field(field_name, raw)
@@ -418,3 +419,79 @@ def parse_bio_confidence(text: str):
         val = int(m.group("pct"))
         return val if 0 <= val <= 100 else None
     return None
+
+
+# ------------------------------------------------ unanchored vocab sweep
+
+import json as _json
+from pathlib import Path as _Path
+
+_NAME_LEX = None
+
+
+def _name_lexicon():
+    global _NAME_LEX
+    if _NAME_LEX is None:
+        path = _Path(__file__).resolve().parent.parent / "models" / "name_lexicon.json"
+        try:
+            _NAME_LEX = _json.loads(path.read_text())
+        except Exception:
+            _NAME_LEX = {"first": [], "last": []}
+    return _NAME_LEX
+
+
+def vocab_sweep(tokens, page_index: int, source: str, channel_conf: float):
+    """Scan raw token windows for closed-vocab values without anchors.
+    Weak-rank candidates that rescue fields when labels are OCR-garbled."""
+    out = {}
+    words = [t.text for t in tokens]
+
+    def add(field, value, score, nwin):
+        conf = 0.45 * channel_conf * (score if score <= 1 else score / 100.0)
+        out.setdefault(field, []).append(FieldValue(
+            value, conf, source, page_index, anchored=False))
+
+    joined = " ".join(words)
+    spn = parse_sponsor(joined)
+    if spn:
+        add("sponsor_id", spn, 0.9, 1)
+    dt = parse_date(joined)
+    if dt:
+        add("arrival_date", dt, 0.7, 1)
+    for n in (1, 2):
+        for i in range(len(words) - n + 1):
+            win = " ".join(words[i:i + n])
+            if len(win) < 4:
+                continue
+            val, score = snap(win.replace("_", " "),
+                              [s.replace("_", " ") for s in vocab.SPECIES],
+                              min_score=74, margin=6)
+            if val:
+                add("species_code", val.replace(" ", "_"), score, n)
+                continue
+            val, score = snap(win, vocab.HOME_WORLDS, min_score=84, margin=6)
+            if val:
+                add("home_world", val, score, n)
+                continue
+            val, score = snap(win.lower(), vocab.PURPOSES, min_score=85, margin=6)
+            if val:
+                add("declared_purpose", val, score, n)
+    # visa tokens are short; require tight match on single tokens
+    for w in words:
+        cleaned = w.strip(".,;:'\"()").upper()
+        if 3 <= len(cleaned) <= 10:
+            val, score = snap(cleaned, vocab.VISA_CLASSES, min_score=80, margin=8)
+            if val:
+                add("visa_class", val, score, 1)
+    # two-token name windows against the learned name pools
+    lex = _name_lexicon()
+    if lex["first"]:
+        for i in range(len(words) - 1):
+            a, b = words[i].strip(".,:;"), words[i + 1].strip(".,:;")
+            if not (a[:1].isalpha() and b[:1].isalpha() and len(a) > 2 and len(b) > 2):
+                continue
+            fa, sa = snap(a.capitalize(), lex["first"], min_score=82, margin=8)
+            fb, sb = snap(b.capitalize(), lex["last"], min_score=82, margin=8)
+            if fa and fb:
+                add("applicant_name", f"{fa} {fb}", min(sa, sb), 2)
+    return out
