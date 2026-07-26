@@ -26,15 +26,9 @@ it is negative the honest conclusion is to leave the table alone.
 
     python3 calibrate.py <cache.pkl> <truth.csv> [k]
 """
-import csv
-import pickle
 import sys
-from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "solution"))
-
-import adjudicate  # noqa: E402
+import harness
 
 PRIOR_K = 10.0
 
@@ -48,24 +42,11 @@ def main():
     cache_path, truth_path = sys.argv[1], sys.argv[2]
     k = float(sys.argv[3]) if len(sys.argv) > 3 else PRIOR_K
 
-    cache = pickle.load(open(cache_path, "rb"))["results"]
-    truth = {r["case_id"]: r for r in csv.DictReader(open(truth_path))}
-
-    dates = [c["fields"].get("arrival_date") for c in cache.values()
-             if c["fields"].get("arrival_date")]
-    ref = adjudicate.compute_ref_date(dates)
+    cache, truth = harness.load(cache_path, truth_path)
 
     cases = []       # (rule, current_conf, correct)
     stats = {}       # rule -> [n, correct, sum_of_current_conf]
-    for cid, t in sorted(truth.items()):
-        res = cache.get(cid)
-        if res is None:
-            continue
-        if res.get("ok"):
-            adj, conf, reason = adjudicate.adjudicate(
-                res["fields"], res["aux"], res["cands"], ref)
-        else:
-            adj, conf, reason = "NEEDS_REVIEW", 0.6, "extract_failed"
+    for cid, t, fields, aux, cands, adj, conf, reason in harness.run(cache, truth):
         correct = int(str(t.get("adjudication", "")).strip().upper() == adj)
         rule = rule_key(reason)
         cases.append((rule, conf, correct))

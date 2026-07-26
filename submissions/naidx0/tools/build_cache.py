@@ -3,10 +3,15 @@
 
 Development tooling -- NOT copied into the Docker image.
 
-Ingest + extract is ~95% of pipeline runtime and is unaffected by changes to
-adjudication, calibration or policy tables.  Caching it once turns an 18-minute
-experiment into a ~1-second one, which is the difference between testing one
-idea per uptime window and testing fifty.
+Ingest (rasterise + OCR) is ~95% of pipeline runtime; field extraction,
+canonicalization and adjudication together are ~5%.  So the cache stores the
+*ingested pages* -- the OCR text and spans -- and the replay tools re-run
+everything downstream of them.  That matters: the fuzzy-matching thresholds in
+vocab.py are some of the most consequential parameters in the pipeline, and
+caching post-extraction fields instead would have frozen them out of reach.
+
+Caching turns an 18-minute experiment into a ~1-second one, which is the
+difference between testing one idea per uptime window and testing fifty.
 
     python3 build_cache.py <pdf_dir> <out.pkl> [workers]
 
@@ -24,20 +29,16 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "solution"))
 
-import extract  # noqa: E402
 import ingest  # noqa: E402
 
 
 def _one(path):
     try:
         case_id, pages = ingest.ingest_pdf(str(path), do_ocr=True)
-        fields, aux, cands = extract.resolve_fields(pages, frozenset(), frozenset())
-        return {"case_id": case_id, "fields": fields, "aux": aux,
-                "cands": cands, "ok": True}
+        return {"case_id": case_id, "pages": pages, "ok": True}
     except Exception as exc:  # never let one bad packet kill the build
         return {"case_id": ingest._case_id_from_name(str(path)) or "MIB-000000",
-                "fields": {}, "aux": {}, "cands": {}, "ok": False,
-                "error": repr(exc)}
+                "pages": [], "ok": False, "error": repr(exc)}
 
 
 SHARD = 50

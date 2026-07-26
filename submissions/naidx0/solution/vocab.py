@@ -137,6 +137,14 @@ def canon_fee(value):
     return ""
 
 
+# Closed-vocabulary rescue parameters.  Named constants rather than inline
+# literals because they are swept against the labeled corpus (tools/sweep.py);
+# see the rationale in canon_flag_token below.
+FLAG_RESCUE_MIN = 62      # accept a best match at or above this score
+FLAG_RESCUE_MARGIN = 12   # ...only if it beats the runner-up by this much
+FLAG_RESCUE_MINLEN = 9    # ...and the token is long enough to be a flag name
+
+
 def canon_flag_token(tok):
     t = _clean_enum(tok).lower()
     if not t or t in {"none", "null", "na", "n_a"}:
@@ -152,17 +160,22 @@ def canon_flag_token(tok):
     # that against its best match cannot be closer to a different flag.  A
     # degraded scan yields things like "Bohazond_yed" (72 vs biohazard_red)
     # that the thresholds above reject even though they are unambiguous.
-    # Accepting them down to 62 keeps a 20-point margin over the confusability
-    # ceiling, so this can never substitute one flag for another.
+    # Accepting them well below the usual thresholds still keeps a wide margin
+    # over the confusability ceiling, so this can never substitute one flag for
+    # another.  A real example from the corpus: a B-13 slip whose risk panel
+    # OCR'd as "Coserved Yaga: | ing':'e_fiomet'se" scores 57 against
+    # illegible_biometrics and 37 against the next-best flag -- mangled past
+    # recognition, but not remotely ambiguous.
     #
     # The residual risk is matching OCR noise that is not a flag at all, which
     # would invent a disqualifier and wrongly DENY.  Two guards: the token must
     # be long enough to be a flag name at all, and the margin over the
     # runner-up must be decisive.  Note this can only ever add denial signals,
     # so it cannot cause a catastrophic false approval.
-    if best and len(t) >= 9 and best[1] >= 62:
+    if best and len(t) >= FLAG_RESCUE_MINLEN and best[1] >= FLAG_RESCUE_MIN:
         ranked = process.extract(t, RISK_FLAGS, scorer=fuzz.ratio, limit=2)
-        if len(ranked) < 2 or (ranked[0][1] - ranked[1][1]) >= 12:
+        if (len(ranked) < 2
+                or (ranked[0][1] - ranked[1][1]) >= FLAG_RESCUE_MARGIN):
             return best[0]
     return None
 

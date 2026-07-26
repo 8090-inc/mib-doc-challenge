@@ -25,16 +25,10 @@ behave differently and a rule can be right for one and wrong for the other.
 
     python3 bucket_ev.py <cache.pkl> <truth.csv> [--min N]
 """
-import csv
-import pickle
 import sys
 from collections import defaultdict
-from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "solution"))
-
-import adjudicate  # noqa: E402
+import harness
 
 DECISIONS = ("APPROVED", "DENIED", "NEEDS_REVIEW")
 
@@ -61,27 +55,13 @@ def main():
     if "--min" in sys.argv:
         min_n = int(sys.argv[sys.argv.index("--min") + 1])
 
-    cache = pickle.load(open(cache_path, "rb"))["results"]
-    truth = {r["case_id"]: r for r in csv.DictReader(open(truth_path))}
-
-    dates = [c["fields"].get("arrival_date") for c in cache.values()
-             if c["fields"].get("arrival_date")]
-    ref = adjudicate.compute_ref_date(dates)
+    cache, truth = harness.load(cache_path, truth_path)
 
     buckets = defaultdict(lambda: {"A": 0, "D": 0, "R": 0, "cur": None})
     total_n = 0
-    for cid, t in sorted(truth.items()):
-        res = cache.get(cid)
-        if res is None:
-            continue
-        if res.get("ok"):
-            adj, _conf, reason = adjudicate.adjudicate(
-                res["fields"], res["aux"], res["cands"], ref)
-        else:
-            adj, reason = "NEEDS_REVIEW", "extract_failed"
-        dip = res["fields"].get("visa_class") == "DIP-1"
-        key = (rule_key(reason), "DIP-1" if dip else "other")
-        b = buckets[key]
+    for cid, t, fields, aux, cands, adj, _conf, reason in harness.run(cache, truth):
+        dip = fields.get("visa_class") == "DIP-1"
+        b = buckets[(rule_key(reason), "DIP-1" if dip else "other")]
         b["cur"] = adj
         b[{"APPROVED": "A", "DENIED": "D", "NEEDS_REVIEW": "R"}[
             str(t.get("adjudication", "")).strip().upper()]] += 1
