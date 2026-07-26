@@ -14,6 +14,8 @@ RapidOCR provides an independent second reading of the same rendered pixels. Its
 
 After policy and decision selection, primary-visible-evidence guards can repair only narrowly audited output gaps. They require exact case scope, compatible applicant linkage, clean visible pixels, and field-specific uniqueness, source-priority, or corroboration gates before repairing a damaged applicant, sponsor, arrival date, or non-`none` biometric risk. A recovered current arrival is replayed through the ordinary policy engine only when the original review trace contained exactly the two arrival-missing reasons; only the replayed decision and confidence are copied. Broader row-shape or packet-template promotions are not used.
 
+A final structural-approval head may discharge a review only when the packet's own topology clears the policy bar: a diplomatic packet carrying exactly one legible fee-receipt page, or a low-confidence `XW-1` review whose packet carries a visible sponsor-attestation page. It runs after every output repair, so it cannot pre-empt the stricter multisource head or discard a recovered field, and it never fires when the baseline raised a denial reason. The promotion is then re-checked against the emitted row itself — `risk_flags` must read `none`, the visa class must still be one of the two eligible classes, and the fee must be `paid` or `waived` — so a repair applied after the head's inputs were read can never leave an approved record that contradicts itself. The head is deliberately not extended to `MED-3`, where a sponsor page is no evidence about the required biohazard check, nor to packets whose visa class is unknown, nor to `TRANSIT-7`. On the training packets it declined all 167 review cases where promoting would have been wrong, including every truly denied diplomatic packet.
+
 Confidence is based on the policy decision trace rather than raw OCR confidence. Frozen calibration artifacts use decision type and generic evidence semantics. A final guarded model may adjust confidence only for `NEEDS_REVIEW` rows, through either a low-confidence map or an unknown-fee floor, and cannot modify any extracted field or decision.
 
 The CPU-only Docker image bundles all OCR models and pinned dependencies. It uses no LLM, VLM, cloud OCR, API, runtime download, or network service. Cases run independently across at most four workers, failures fall back to a schema-valid review row, and predictions are written atomically.
@@ -24,14 +26,14 @@ The resulting 1,000 predictions were evaluated with the challenge evaluator.
 
 | Metric | Result |
 | --- | ---: |
-| Total score | **128.165836 / 150** |
-| Field extraction | 44.971111 / 50 |
-| Classification | 65.790000 / 80 |
-| Calibration | 17.404725 / 20 |
+| Total score | **128.710915 / 150** |
+| Field extraction | 44.966667 / 50 |
+| Classification | 66.330000 / 80 |
+| Calibration | 17.414248 / 20 |
 | Submitted valid rows | 1,000 / 1,000 |
 | Catastrophic false approvals | **0** |
 
-There were 764 exactly correct adjudications. Of the remaining cases, 232 were conservative deferrals of a true approval or denial to `NEEDS_REVIEW`. Only four emitted a wrong non-review decision, and none was a false approval.
+There were 773 exactly correct adjudications. Of the remaining cases, 223 were conservative deferrals of a true approval or denial to `NEEDS_REVIEW`. Only four emitted a wrong non-review decision, and none was a false approval.
 
 ## Failure Modes
 
