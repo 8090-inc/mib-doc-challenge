@@ -152,13 +152,17 @@ def snap(raw: str, choices, min_score: float = 78.0, margin: float = 4.0):
     return None, 0.0
 
 
-_SPN_RE = re.compile(r"S?[P₽F]?N?\s*[-–—:# ]{0,2}\s*([0-9OolISBZzGDQT]{4})\b",
-                     re.IGNORECASE)
+_SPN_STRICT_RE = re.compile(
+    r"[S5$][PF₽][NM]\s*[-–—:# ]{0,2}\s*([0-9OolISBZzGDQT]{4})\b", re.IGNORECASE)
+# Loose variant for text already known to be a sponsor-field value.
+_SPN_LOOSE_RE = re.compile(
+    r"(?:[S5$]?[PF₽]?[NM]?\s*[-–—:# ]{0,2})?\b([0-9OolISBZzGDQT]{4})\b")
 
 
-def parse_sponsor(text: str):
-    m = re.search(r"SPN\s*[-–—:# ]{0,2}\s*([0-9OolISBZzGDQT]{4})", text,
-                  re.IGNORECASE) or _SPN_RE.search(text)
+def parse_sponsor(text: str, anchored: bool = False):
+    m = _SPN_STRICT_RE.search(text)
+    if not m and anchored:
+        m = _SPN_LOOSE_RE.search(text)
     if not m:
         return None
     digits = m.group(1).translate(_CONF_DIGIT)
@@ -265,7 +269,7 @@ def parse_field(field_name: str, raw: str):
     if field_name == "fee_status":
         return snap(raw.lower(), vocab.FEE_STATUSES, min_score=70, margin=8)
     if field_name == "sponsor_id":
-        spn = parse_sponsor(raw)
+        spn = parse_sponsor(raw, anchored=True)
         return (spn, 0.9) if spn else (None, 0.0)
     if field_name in ("arrival_date", "receipt_date"):
         dt = parse_date(raw)
@@ -319,3 +323,98 @@ def extract_fields(tokens, page_index: int, source: str, channel_conf: float = 1
             out["sponsor_id"] = [FieldValue(spn, 0.5 * channel_conf, source,
                                             page_index, anchored=False)]
     return out
+
+
+# ------------------------------------------------- specialized page parsers
+
+_LETTER_RE = re.compile(
+    r"Sponsor\s+(?P<spn>[S5$][PF₽][NM][-–—\s:#]{0,2}[0-9OolISBZzGDQT]{4})\s+"
+    r"attests\s+that\s+(?P<name>[A-Z][\w'-]+(?:\s+[A-Z][\w'-]+)?)\s+is\s+expected",
+    re.IGNORECASE)
+_LETTER_CLASS_RE = re.compile(
+    r"class\s+(?P<visa>[A-Z]{2,8}\s*[-–—]?\s*\d)\s+compliance", re.IGNORECASE)
+_LETTER_FOR_RE = re.compile(
+    r"expected\s+on\s+Earth\s+for\s+(?P<purpose>[a-z][a-z ]{3,30}?)(?:\s+work|\s+duties|[.,]|$)",
+    re.IGNORECASE)
+
+
+def parse_sponsor_letter(text: str) -> dict:
+    """Parse 'Sponsor SPN-#### attests that <Name> is expected...' letters."""
+    out = {}
+    m = _LETTER_RE.search(text)
+    if m:
+        spn = parse_sponsor(m.group("spn"), anchored=True)
+        if spn:
+            out["sponsor_id"] = spn
+        out["letter_name"] = " ".join(
+            w.capitalize() for w in m.group("name").split()[:2])
+    m = _LETTER_CLASS_RE.search(text)
+    if m:
+        from . import vocab
+        visa, score = snap(m.group("visa").upper(), vocab.VISA_CLASSES,
+                           min_score=70, margin=6)
+        if visa:
+            out["visa_class"] = visa
+    m = _LETTER_FOR_RE.search(text)
+    if m:
+        from . import vocab
+        purpose, score = snap(m.group("purpose").lower().strip(), vocab.PURPOSES,
+                              min_score=75, margin=4)
+        if purpose:
+            out["declared_purpose"] = purpose
+    return out
+
+
+_FINDING_RE = re.compile(
+    r"Finding\s*[:\-]\s*(?P<verdict>APPROV\w+|DEN[IY]\w+|NEEDS[\s_]*REVIEW)",
+    re.IGNORECASE)
+_REASON_RE = re.compile(r"Reason\s*[:\-]\s*(?P<reason>[^\n]{0,160})", re.IGNORECASE)
+
+
+def parse_adjudicator_note(text: str) -> dict:
+    """Parse 'Finding: DENIED. Reason: ...' adjudicator notes."""
+    out = {}
+    m = _FINDING_RE.search(text)
+    if m:
+        verdict = m.group("verdict").upper()
+        if verdict.startswith("APPROV"):
+            out["note_finding"] = "APPROVED"
+        elif verdict.startswith("DEN"):
+            out["note_finding"] = "DENIED"
+        else:
+            out["note_finding"] = "NEEDS_REVIEW"
+    m = _REASON_RE.search(text)
+    if m:
+        out["note_reason"] = m.group("reason").strip()
+        from . import vocab
+        found = set()
+        for token in re.findall(r"[a-z][a-z_]{4,}", out["note_reason"].lower()):
+            snapped, _ = snap(token.replace("_", " "),
+                              [f.replace("_", " ") for f in vocab.RISK_FLAGS],
+                              min_score=85, margin=5)
+            if snapped:
+                found.add(snapped.replace(" ", "_"))
+        if found:
+            out["note_flags"] = sorted(found)
+    if re.search(r"rescind\w+|vacat\w+|withdraw\w+|revers\w+", text, re.IGNORECASE):
+        out["note_rescinded"] = True
+    return out
+
+
+_REGISTRY_STATUS_RE = re.compile(
+    r"Registry\s+Status\W{0,8}(?P<status>[A-Z][A-Z ]{2,30})", re.IGNORECASE)
+_BIO_CONF_RE = re.compile(
+    r"Biometric\s+confidence\W{0,6}(?P<pct>\d{1,3})\s*%", re.IGNORECASE)
+
+
+def parse_registry_status(text: str):
+    m = _REGISTRY_STATUS_RE.search(text)
+    return m.group("status").strip().upper() if m else None
+
+
+def parse_bio_confidence(text: str):
+    m = _BIO_CONF_RE.search(text)
+    if m:
+        val = int(m.group("pct"))
+        return val if 0 <= val <= 100 else None
+    return None

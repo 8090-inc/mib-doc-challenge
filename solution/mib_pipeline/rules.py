@@ -92,8 +92,10 @@ def cascade(belief: CaseBelief):
     if disq:
         return "DENIED", "disqualifying_flag:" + "|".join(sorted(disq))
 
-    # 3-4. Fees.
-    if belief.fee_status == "unknown" or belief.fee_status is None:
+    # 3-4. Fees. An explicitly unreadable/unknown fee needs review; a packet
+    # simply missing its receipt page is not a fee problem (verified on train:
+    # truth fee-unknown receipts literally print "unknown").
+    if belief.fee_status == "unknown":
         return "NEEDS_REVIEW", "fee_unknown"
     if belief.fee_status == "unpaid" and not belief.has_hardship_waiver:
         return "DENIED", "fee_unpaid"

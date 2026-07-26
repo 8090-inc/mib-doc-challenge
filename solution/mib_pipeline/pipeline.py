@@ -12,13 +12,17 @@ from pathlib import Path
 
 from . import evidence as evidence_mod
 from . import vocab
-from .extract import Token, extract_fields, parse_date
+from .extract import (Token, extract_fields, parse_adjudicator_note,
+                      parse_bio_confidence, parse_date, parse_registry_status,
+                      parse_sponsor_letter)
 from .ocr import ocr_page
 from .pdfio import harvest
 from .rules import CaseBelief, cascade, ev_decide
 from .stamps import read_note_text, read_stamps
 
 PER_PDF_BUDGET_S = 25.0
+# Bump when extract_case output semantics change (dev cache key).
+EXTRACT_VERSION = 4
 
 # Output fill-ins for unreadable fields (train-label modes). These are
 # submission guesses only - adjudication beliefs never consume them.
@@ -33,6 +37,25 @@ FIELD_PRIORS = {
     "risk_flags": "none",
     "fee_status": "paid",
 }
+
+
+import re as _re
+
+_FOOTER_RE = _re.compile(
+    r"Packet\s+MIB[-\s]*\d{6}\s*/\s*page\s*\d+|Synthetic hiring challenge document"
+    r"|MIB[-\s]*\d{6}\s*\|\s*MIB Eyes Only", _re.IGNORECASE)
+
+# Fake answer keys / injected instructions are untrusted regardless of
+# visibility (field manual: they are not evidence). Filter them out of the
+# extraction stream and remember the trap.
+_INJECT_RE = _re.compile(
+    r"answer\s*key|SYSTEM\s*:|ignore\s+(all\s+|the\s+)?(visible\s+)?(evidence|instructions|policy)"
+    r"|output\s+this|approve\s+(this|all)\s+case|adjudicate\s+as|final\s+answer",
+    _re.IGNORECASE)
+
+
+def meaningful_text(text: str) -> str:
+    return _FOOTER_RE.sub("", text).strip()
 
 
 def spans_to_tokens(spans):
@@ -92,16 +115,18 @@ def extract_case(pdf_path: Path) -> dict:
 
     candidates = {}
     page_types = []
+    page_details = []   # per page: {type, channel, conf, chars}
     damage_signals = []
     trap_detected = False
     stamp_events = []      # (kind, page_type, page_index)
     ocr_pages = 0
+    special = {"letter_names": [], "notes": []}
 
     try:
         for page in pages:
             channel = "text"
             channel_conf = 1.0
-            if page.is_scanned or len(page.visible_text) < 40:
+            if page.is_scanned or len(meaningful_text(page.visible_text)) < 30:
                 result = ocr_page(doc, page.index,
                                   allow_escalation=time_left() > 20,
                                   time_left=time_left)
@@ -123,8 +148,27 @@ def extract_case(pdf_path: Path) -> dict:
                                                 "deny", "json")):
                     trap_detected = True
 
+            # Drop injected instruction/answer-key lines from extraction input.
+            inj_tokens = [t for t in tokens if _INJECT_RE.search(t.text)]
+            if inj_tokens or _INJECT_RE.search(text_for_type or ""):
+                trap_detected = True
+                from .extract import group_lines
+                bad_rows = set()
+                for line in group_lines(tokens):
+                    line_text = " ".join(t.text for t in line)
+                    if _INJECT_RE.search(line_text):
+                        bad_rows.update(id(t) for t in line)
+                tokens = [t for t in tokens if id(t) not in bad_rows]
+
             page_type = classify_page_type(text_for_type)
             page_types.append(page_type)
+            page_details.append({
+                "type": page_type,
+                "channel": channel,
+                "conf": round(channel_conf, 3),
+                "chars": len(meaningful_text(text_for_type or "")),
+                "scanned": bool(page.is_scanned),
+            })
 
             # Stamps (rendered ink) + adjudicator note phrasing.
             for ev in read_stamps(doc, page.index, time_left=time_left):
@@ -138,6 +182,30 @@ def extract_case(pdf_path: Path) -> dict:
                 for val in vals:
                     val.page_type = page_type
                 candidates.setdefault(field_name, []).extend(vals)
+
+            page_text_now = " ".join(t.text for t in tokens)
+            if page_type == "sponsor_letter":
+                letter = parse_sponsor_letter(page_text_now)
+                for fname in ("sponsor_id", "visa_class", "declared_purpose"):
+                    if letter.get(fname):
+                        from .extract import FieldValue
+                        candidates.setdefault(fname, []).append(FieldValue(
+                            letter[fname], 0.85 * channel_conf, channel,
+                            page.index, page_type="sponsor_letter"))
+                if letter.get("letter_name"):
+                    special["letter_names"].append(letter["letter_name"])
+            elif page_type == "adjudicator_note":
+                note = parse_adjudicator_note(page_text_now)
+                if note:
+                    special["notes"].append(note)
+            elif page_type == "registry_extract":
+                status = parse_registry_status(page_text_now)
+                if status:
+                    special["registry_status"] = status
+            elif page_type == "biometric_slip":
+                bio = parse_bio_confidence(page_text_now)
+                if bio is not None:
+                    special["bio_conf"] = min(special.get("bio_conf", 101), bio)
     finally:
         doc.close()
 
@@ -146,12 +214,14 @@ def extract_case(pdf_path: Path) -> dict:
 
     return {
         "case_id": pdf_path.stem,
+        "special": special,
         "values": values,
         "confs": confs,
         "conflicts": {k: bool(v) for k, v in conflicts.items()},
         "flags": sorted(flags),
         "flag_conf": flag_conf,
         "page_types": page_types,
+        "page_details": page_details,
         "damage": (sum(damage_signals) / len(damage_signals)
                    if damage_signals else 1.0),
         "ocr_pages": ocr_pages,
@@ -163,21 +233,23 @@ def extract_case(pdf_path: Path) -> dict:
 
 
 def batch_receipt_clock(all_cases) -> date:
-    """Best batch-wide stand-in for 'now': the latest receipt date seen in
-    any packet, else the latest date of any kind seen in the batch."""
+    """Batch-wide stand-in for 'now' when a packet has no receipt date:
+    a high percentile of plausible dates seen across the batch (robust to
+    isolated OCR misparses producing far-future years)."""
     receipts = []
     others = []
     for case in all_cases:
         r = parse_date(case.get("values", {}).get("receipt_date", "") or "")
-        if r:
+        if r and "2020-01-01" <= r <= "2035-12-31":
             receipts.append(r)
         a = parse_date(case.get("values", {}).get("arrival_date", "") or "")
-        if a:
+        if a and "2020-01-01" <= a <= "2035-12-31":
             others.append(a)
-    pool = receipts or others
+    pool = sorted(receipts or others)
     if not pool:
         return date(2026, 7, 1)
-    return date.fromisoformat(max(pool))
+    idx = min(len(pool) - 1, int(0.995 * (len(pool) - 1) + 0.5))
+    return date.fromisoformat(pool[idx])
 
 
 def belief_from_case(case: dict, clock: date) -> CaseBelief:
@@ -187,16 +259,34 @@ def belief_from_case(case: dict, clock: date) -> CaseBelief:
     receipt = parse_date(values.get("receipt_date", "") or "")
     stamps = case.get("stamps", [])
     kinds = [k for k, _, _ in stamps]
-    # note pages outrank stamp blobs; "sample_denial" is ignored by design
+    special = case.get("special", {})
+
+    # Explicit adjudicator findings outrank stamp blobs.
     note_approves = "approve" in kinds
     note_denies = "deny" in kinds
     rescinded = "rescinded" in kinds
+    for note in special.get("notes", []):
+        if note.get("note_finding") == "APPROVED":
+            note_approves = True
+        elif note.get("note_finding") == "DENIED":
+            note_denies = True
+        if note.get("note_rescinded"):
+            rescinded = True
 
     flags = set(case.get("flags", []))
+    for note in special.get("notes", []):
+        flags.update(note.get("note_flags", []))
     if case.get("conflicts", {}).get("applicant_name"):
         flags.add("identity_conflict")
     if case.get("conflicts", {}).get("sponsor_id"):
         flags.add("sponsor_mismatch")
+    # Sponsor letter naming a different applicant than the packet name.
+    intake_name = (values.get("applicant_name") or "").lower()
+    for lname in special.get("letter_names", []):
+        if intake_name and lname.lower() != intake_name:
+            from rapidfuzz import fuzz as _fuzz
+            if _fuzz.ratio(lname.lower(), intake_name) < 72:
+                flags.add("sponsor_mismatch")
 
     return CaseBelief(
         visa_class=values.get("visa_class"),
@@ -262,3 +352,29 @@ def process_pdf(pdf_path: Path) -> dict:
     """Single-PDF convenience wrapper (tests, debugging)."""
     case = extract_case(pdf_path)
     return finalize_case(case, [case])
+
+
+def debug_info(case: dict, all_cases) -> dict:
+    """Dev-only: full decision trace for error analysis."""
+    if "values" not in case:
+        return {"case_id": case["case_id"], "error": case.get("error", "?")}
+    clock = batch_receipt_clock(all_cases)
+    belief = belief_from_case(case, clock)
+    adjudication, reason = cascade(belief)
+    return {
+        "case_id": case["case_id"],
+        "adjudication": adjudication,
+        "reason": reason,
+        "values": case["values"],
+        "confs": {k: round(v, 3) for k, v in case["confs"].items()},
+        "conflicts": case.get("conflicts"),
+        "flags_extracted": case.get("flags"),
+        "belief_flags": sorted(belief.risk_flags),
+        "special": case.get("special"),
+        "stamps": case.get("stamps"),
+        "page_types": case.get("page_types"),
+        "damage": round(case.get("damage", 0), 3),
+        "ocr_pages": case.get("ocr_pages"),
+        "trap": case.get("trap_detected"),
+        "clock": clock.isoformat(),
+    }
