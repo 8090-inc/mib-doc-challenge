@@ -22,11 +22,12 @@ Field extraction is evidence-aware rather than a single regex over concatenated
 text. Pages are classified as intake forms, biometric slips, sponsor letters,
 registry extracts, fee receipts, or manual notes. Candidate values receive the
 document precedence specified in the field manual. Explicit manual corrections
-outrank the original field. Closed vocabularies (species, home world, visa,
-purpose, fee, and risk flags) use OCR-tolerant matching; names, dates, and
-sponsor IDs use context-specific parsers and conservative OCR-character
-repairs. Cross-document disagreements are retained as evidence instead of being
-silently overwritten.
+outrank the original field, including sponsor corrections embedded in an intake
+page. Closed vocabularies (species, home world, visa, purpose, fee, and risk
+flags) use OCR-tolerant matching; names, dates, and sponsor IDs use
+context-specific parsers and conservative OCR-character repairs.
+Cross-document disagreements are retained as evidence unless a trusted final
+finding supersedes an inferred, non-explicit conflict.
 
 The adjudicator is a hybrid of deterministic policy and two small offline
 models. A word-and-character TF-IDF logistic model is robust to both policy
@@ -41,11 +42,17 @@ unpaid fees. Manual findings are applied first, which prevents an old or
 crossed-out denial from overriding a later signed decision.
 
 Policy-time missingness is separate from the required serialized output. The
-decision and confidence always see an unread fee or visa as unknown. Only
-after they are fixed may fold-validated field models and fold-learned
-categorical priors estimate unresolved output fields. Visible `$809` and
-`DIP-WAIVER` receipt geometry also recover fee status when the status word is
-damaged. None of these output-only estimates can create an approval.
+adjudicator sees an unread fee or visa as unknown. Fold-validated field models
+and fold-learned categorical priors may estimate unresolved output fields,
+including a neutral in-window date when the schema requires a date but the
+visible value is unreadable. Visible `$809` and `DIP-WAIVER` receipt geometry
+also recover fee status when the status word is damaged. A final one-way
+postcondition checks the emitted fields before confidence calibration:
+disqualifying risks, revoked non-diplomatic sponsors, transit classes, stale
+dates, and unpaid fees force denial, while review flags and unresolved core
+evidence without a trusted manual finding can only demote an approval to review.
+Thus output-only estimates cannot leave a decision that contradicts the
+serialized row.
 The output-boundary idea was inspired by the public MIT-licensed
 `OUTPUT_ONLY_FALLBACKS` design in Abhishek Enaguthi's challenge solution;
 `ATTRIBUTION.md` in my solution repository records the source and the
@@ -67,16 +74,16 @@ or model-selection feedback. The pipeline contains no per-case lookup table and
 does not use filenames for anything beyond the required case ID.
 
 On five-fold out-of-fold public training predictions, the selected policy
-achieved 75.6% adjudication accuracy, 64.19/80 classification points,
-15.23/20 calibration points (mean Brier 0.1192), and five catastrophic false
+achieved 73.5% adjudication accuracy, 62.82/80 classification points,
+15.09/20 calibration points (mean Brier 0.1226), and five catastrophic false
 approvals. Emitted field accuracy is 94.0% species, 90.7% home world, 90.7%
-purpose, 89.0% visa class, 83.6% arrival date, and 82.8% fee status, for
-42.14/50 extraction points. The combined development OOF estimate is
-121.56/150. Because blend and threshold selection use these OOF predictions,
+purpose, 89.0% visa class, 83.6% arrival date, 82.9% sponsor ID, and 82.8% fee
+status, for 42.53/50 extraction points. The combined development OOF estimate
+is 120.44/150. Because blend and threshold selection use these OOF predictions,
 this is still a development estimate rather than an untouched final audit.
 
-The fitted full-data integration evaluation scores 137.96/150
-(43.42 extraction, 76.63 classification, 17.91 calibration) with zero false
+The fitted full-data integration evaluation scores 135.41/150
+(43.81 extraction, 74.09 classification, 17.51 calibration) with zero false
 approvals. I report that only as an end-to-end sanity check, not as evidence of
 generalization.
 
