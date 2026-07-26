@@ -19,6 +19,7 @@ sys.path.insert(0, str(HERE.parent / "solution"))
 
 import adjudicate  # noqa: E402
 import extract  # noqa: E402
+import solution  # noqa: E402
 import vocab  # noqa: E402
 
 FIELD_W = {"applicant_name": 5, "species_code": 6, "home_world": 5,
@@ -31,6 +32,7 @@ def reload_solution():
     importlib.reload(vocab)
     importlib.reload(extract)
     importlib.reload(adjudicate)
+    importlib.reload(solution)
 
 
 def load(cache_path, truth_path):
@@ -40,10 +42,18 @@ def load(cache_path, truth_path):
 
 
 def run(cache, truth):
-    """Yield (case_id, truth_row, fields, aux, cands, decision, conf, reason).
+    """Yield (case_id, truth_row, record, aux, cands, decision, conf, reason).
 
-    The reference date is derived from the batch exactly as solution.py does it,
-    so it must be computed over the whole cache before any case is decided.
+    ``record`` is what the pipeline would actually emit, not the intermediate
+    resolved fields -- solution.py runs a scavenge/placeholder layer on top of
+    them (a wrong value and a missing value both score zero, so it guesses
+    rather than leaving a field blank).  Scoring the raw fields instead
+    understates extraction and would send us off optimising something the
+    pipeline already handles.
+
+    Both batch-level quantities solution.py derives -- the reference date and
+    the modal fee fallback -- are computed over the whole cache first, exactly
+    as the real run does.
     """
     parsed = {}
     for cid, res in cache.items():
@@ -60,16 +70,29 @@ def run(cache, truth):
              if p and p[0].get("arrival_date")]
     ref = adjudicate.compute_ref_date(dates)
 
+    fee_counts = {}
+    for cid in sorted(parsed):
+        p = parsed[cid]
+        fs = p[0].get("fee_status") if p else None
+        if fs in solution.FEE_VALUES:
+            fee_counts[fs] = fee_counts.get(fs, 0) + 1
+    fee_fallback = (sorted(fee_counts, key=lambda k: (-fee_counts[k], k))[0]
+                    if fee_counts else "paid")
+
     for cid, t in sorted(truth.items()):
         if cid not in parsed:
             continue
         got = parsed[cid]
         if got is None:
-            yield (cid, t, {}, {}, {}, "NEEDS_REVIEW", 0.6, "extract_failed")
+            rec = solution._finalize_output(solution._default_record(cid))
+            yield (cid, t, rec, {}, {}, "NEEDS_REVIEW", 0.6, "extract_failed")
             continue
         fields, aux, cands = got
         adj, conf, reason = adjudicate.adjudicate(fields, aux, cands, ref)
-        yield (cid, t, fields, aux, cands, adj, conf, reason)
+        rec = solution._finalize_output(solution._build_record(
+            {"case_id": cid, "fields": fields, "aux": aux, "cands": cands,
+             "ok": True}, ref, fee_fallback))
+        yield (cid, t, rec, aux, cands, adj, conf, reason)
 
 
 def norm(v):
