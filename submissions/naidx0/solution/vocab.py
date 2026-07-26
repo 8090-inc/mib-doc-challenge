@@ -140,7 +140,7 @@ def canon_fee(value):
 # Closed-vocabulary rescue parameters.  Named constants rather than inline
 # literals because they are swept against the labeled corpus (tools/sweep.py);
 # see the rationale in canon_flag_token below.
-FLAG_RESCUE_MIN = 62      # accept a best match at or above this score
+FLAG_RESCUE_MIN = 66      # accept a best match at or above this score
 FLAG_RESCUE_MARGIN = 12   # ...only if it beats the runner-up by this much
 FLAG_RESCUE_MINLEN = 9    # ...and the token is long enough to be a flag name
 
