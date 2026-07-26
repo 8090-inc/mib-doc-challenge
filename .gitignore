@@ -18,3 +18,4 @@ data/validation/
 # Derived OCR/extraction cache used by tools/replay.py (rebuildable).
 *.pkl
 *.shards/
+venv/
