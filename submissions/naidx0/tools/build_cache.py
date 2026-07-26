@@ -10,8 +10,10 @@ idea per uptime window and testing fifty.
 
     python3 build_cache.py <pdf_dir> <out.pkl> [workers]
 
-The cache is committed to the repo on purpose: this environment restarts
-frequently and restores the working tree, so anything uncommitted is lost.
+Work is written out in shards as it completes and finished shards are skipped
+on a re-run, so an interrupted build resumes instead of starting over.  The
+cache itself is a derived artifact and is deliberately not committed -- it is
+reproducible from the training PDFs in about twenty minutes.
 """
 import os
 import pickle
@@ -38,18 +40,35 @@ def _one(path):
                 "error": repr(exc)}
 
 
+SHARD = 50
+
+
 def main():
     pdf_dir, out = sys.argv[1], sys.argv[2]
     workers = int(sys.argv[3]) if len(sys.argv) > 3 else 4
     pdfs = sorted(Path(pdf_dir).rglob("*.pdf"))
-    print(f"caching {len(pdfs)} packets with {workers} workers", flush=True)
+    shard_dir = Path(out).with_suffix(".shards")
+    shard_dir.mkdir(parents=True, exist_ok=True)
+
+    shards = [(i, pdfs[i:i + SHARD]) for i in range(0, len(pdfs), SHARD)]
+    todo = [(i, batch) for i, batch in shards
+            if not (shard_dir / f"{i:06d}.pkl").exists()]
+    print(f"caching {len(pdfs)} packets with {workers} workers "
+          f"({len(shards) - len(todo)}/{len(shards)} shards already done)",
+          flush=True)
+
+    with ProcessPoolExecutor(max_workers=workers) as ex:
+        for i, batch in todo:
+            part = {r["case_id"]: r for r in ex.map(_one, batch, chunksize=4)}
+            tmp = shard_dir / f"{i:06d}.tmp"
+            with open(tmp, "wb") as fh:
+                pickle.dump(part, fh, protocol=pickle.HIGHEST_PROTOCOL)
+            tmp.rename(shard_dir / f"{i:06d}.pkl")   # atomic: no torn shard
+            print(f"  shard {i:06d} ({i + len(batch)}/{len(pdfs)})", flush=True)
 
     results = {}
-    with ProcessPoolExecutor(max_workers=workers) as ex:
-        for i, res in enumerate(ex.map(_one, pdfs, chunksize=4), start=1):
-            results[res["case_id"]] = res
-            if i % 100 == 0:
-                print(f"  {i}/{len(pdfs)}", flush=True)
+    for shard in sorted(shard_dir.glob("*.pkl")):
+        results.update(pickle.load(open(shard, "rb")))
 
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     with open(out, "wb") as fh:
