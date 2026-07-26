@@ -11,6 +11,7 @@ drifting apart and quietly reporting different numbers for the same code.
 import csv
 import importlib
 import pickle
+import re
 import sys
 from pathlib import Path
 
@@ -19,6 +20,7 @@ sys.path.insert(0, str(HERE.parent / "solution"))
 
 import adjudicate  # noqa: E402
 import extract  # noqa: E402
+import ingest  # noqa: E402
 import solution  # noqa: E402
 import vocab  # noqa: E402
 
@@ -41,6 +43,48 @@ def load(cache_path, truth_path):
     return cache, truth
 
 
+def _batch_vocab(cache):
+    """Reproduce solution.py's pass A over the cached pages.
+
+    The real pipeline first harvests clean text-layer enum values across the
+    WHOLE batch and feeds them to resolve_fields, so a species or home world
+    printed cleanly on one packet helps canonicalize a mangled OCR read of the
+    same value on another.  Replaying with empty vocabularies understates the
+    score by about 0.3 -- the gap that first showed up against a real run.
+
+    Mirrors ingest.quick_text_layer_values, but off cached pages: it uses only
+    text spans (never OCR), so everything it needs is already in the cache.
+    """
+    species, worlds = set(), set()
+    for res in cache.values():
+        for page in res.get("pages") or []:
+            spans = page.get("text_spans") or []
+            if not spans:
+                continue
+            fields = extract.parse_page_fields({
+                "form_type": ingest._detect_form_type(
+                    "\n".join(s["text"] for s in spans)),
+                "text_spans": spans, "ocr_lines": [], "from_ocr": False})
+            v = fields.get("species_code")
+            if v and re.fullmatch(r"[A-Z][A-Z0-9_]{3,}", v.strip()):
+                species.add(v.strip())
+            w = fields.get("home_world")
+            if w and 2 <= len(w.strip()) <= 20 and not w.strip().startswith("["):
+                worlds.add(w.strip())
+            p = fields.get("declared_purpose")
+            if p:
+                p = " ".join(p.split())
+                if ingest._PURPOSE_RE.fullmatch(p) and not extract._is_damaged(p):
+                    species.add(extract.VOCAB_PURPOSE_PREFIX + p)
+            n = fields.get("applicant_name")
+            if n:
+                n = " ".join(n.split())
+                if ingest._NAME_RE.fullmatch(n) and not extract._is_damaged(n):
+                    for tok in n.split():
+                        species.add(extract.VOCAB_NAME_PREFIX + tok)
+    return frozenset(species), frozenset(worlds)
+
+
 def run(cache, truth):
     """Yield (case_id, truth_row, record, aux, cands, decision, conf, reason).
 
@@ -55,6 +99,8 @@ def run(cache, truth):
     the modal fee fallback -- are computed over the whole cache first, exactly
     as the real run does.
     """
+    species_vocab, world_vocab = _batch_vocab(cache)
+
     parsed = {}
     for cid, res in cache.items():
         if not res.get("ok"):
@@ -62,7 +108,7 @@ def run(cache, truth):
             continue
         try:
             parsed[cid] = extract.resolve_fields(
-                res["pages"], frozenset(), frozenset())
+                res["pages"], species_vocab, world_vocab)
         except Exception:
             parsed[cid] = None
 
