@@ -18,6 +18,12 @@ rates are shrunk toward the global accuracy with a Beta(k) prior; k=10 leaves
 high-count rules essentially at their measured rate while pulling an n=3 rule
 most of the way back to the mean.
 
+How much to shrink is itself a fitted quantity, so k is chosen by 5-fold
+cross-validation: rates come from the training folds and are scored on the
+held-out fold.  The in-sample number always improves and is therefore not
+evidence of anything; the cross-validated number is the one to believe, and if
+it is negative the honest conclusion is to leave the table alone.
+
     python3 calibrate.py <cache.pkl> <truth.csv> [k]
 """
 import csv
@@ -49,6 +55,7 @@ def main():
              if c["fields"].get("arrival_date")]
     ref = adjudicate.compute_ref_date(dates)
 
+    cases = []       # (rule, current_conf, correct)
     stats = {}       # rule -> [n, correct, sum_of_current_conf]
     for cid, t in sorted(truth.items()):
         res = cache.get(cid)
@@ -60,7 +67,9 @@ def main():
         else:
             adj, conf, reason = "NEEDS_REVIEW", 0.6, "extract_failed"
         correct = int(str(t.get("adjudication", "")).strip().upper() == adj)
-        s = stats.setdefault(rule_key(reason), [0, 0, 0.0])
+        rule = rule_key(reason)
+        cases.append((rule, conf, correct))
+        s = stats.setdefault(rule, [0, 0, 0.0])
         s[0] += 1
         s[1] += correct
         s[2] += conf
@@ -91,9 +100,45 @@ def main():
         mark = "  <-- change" if abs(now - sm) >= 0.02 else ""
         print(f"{rule:28s} {n:5d} {now:7.3f} {p:7.3f} {sm:8.3f}{mark}")
 
-    print(f"\ncalibration now {cur_s:.2f}/20 (Brier {cur_b:.4f})")
-    print(f"calibration opt {new_s:.2f}/20 (Brier {new_b:.4f})")
-    print(f"gain            {new_s - cur_s:+.2f}")
+    print(f"\ncalibration now      {cur_s:.2f}/20 (Brier {cur_b:.4f})")
+    print(f"calibration in-sample {new_s:.2f}/20 (Brier {new_b:.4f})  "
+          f"[{new_s - cur_s:+.2f}, optimistic -- fitted on these same cases]")
+
+    # --- cross-validated gain: the number that actually predicts the test set --
+    print("\n5-fold cross-validated gain by shrink strength:")
+    folds = 5
+    best = None
+    for kk in (0.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0):
+        cv = 0.0
+        for f in range(folds):
+            tr = [c for i, c in enumerate(cases) if i % folds != f]
+            te = [c for i, c in enumerate(cases) if i % folds == f]
+            agg = {}
+            for rule, _conf, ok in tr:
+                a = agg.setdefault(rule, [0, 0])
+                a[0] += 1
+                a[1] += ok
+            gp = (sum(a[1] for a in agg.values())
+                  / max(1, sum(a[0] for a in agg.values())))
+            for rule, _conf, ok in te:
+                n_r, ok_r = agg.get(rule, [0, 0])
+                c = (ok_r + kk * gp) / (n_r + kk) if (n_r + kk) else gp
+                cv += (c - ok) ** 2
+        cv_b = cv / len(cases)
+        cv_s = 20.0 * max(0.0, 1.0 - 2.0 * cv_b)
+        flag = ""
+        if best is None or cv_s > best[1]:
+            best, flag = (kk, cv_s), ""
+        print(f"  k={kk:6g}  held-out {cv_s:6.2f}/20 (Brier {cv_b:.4f})  "
+              f"{cv_s - cur_s:+.2f} vs current{flag}")
+    print(f"\nbest shrink k={best[0]:g} -> held-out {best[1]:.2f}/20 "
+          f"({best[1] - cur_s:+.2f} vs current {cur_s:.2f})")
+    if best[1] <= cur_s:
+        print("VERDICT: no honest gain here -- the current table already "
+              "generalises at least as well.  Leave it alone.")
+    else:
+        print("VERDICT: real gain -- rebuild the table with this k, then "
+              "confirm with replay.py on the full set.")
 
     print("\nCONFIDENCE = {")
     for n, rule, now, p, sm in sorted(rows, key=lambda r: r[1]):
