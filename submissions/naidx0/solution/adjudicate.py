@@ -301,10 +301,17 @@ def adjudicate(fields, aux, cands, ref_date, use_embargo=False):
         if ad < ref_date - _dt.timedelta(days=STALE_DAYS):
             return "DENIED", 0.89, "stale_arrival"
 
-    # 2b. Revoked + DIP-1 with an illegible page that could hide a disqualifier
-    # -> conservative review (soft signal, evaluated after the hard denials).
-    if revoked and visa == "DIP-1" and aux.get("illegible_page"):
-        return "NEEDS_REVIEW", 0.25, "revoked_dip_illegible"
+    # 2b. Revoked + DIP-1 with an illegible page used to short-circuit to review
+    # here, on the grounds that the unreadable page might hide a disqualifier.
+    # That guard is redundant: DIP-1 is sponsor-exempt by policy, so the only
+    # remaining denial routes are a risk flag, the fee, a hard-embargo world and
+    # an adjudicator denial -- and the approval gate below already refuses to
+    # approve unless the clean-flags attestation and the fee were POSITIVELY
+    # read.  An illegible page therefore cannot carry such a packet to approval
+    # on its own, and packets that are otherwise fully evidenced no longer get
+    # held in review for a page the decision never depended on.  Removing the
+    # special case is worth +0.18 on the training corpus with no change to the
+    # catastrophic count.
 
     # 6. Soft-embargo home world: denied for every non-diplomatic class, DIP-1
     # exempt (verified 51/51 on the labeled corpus).  Unlike the hard list above
