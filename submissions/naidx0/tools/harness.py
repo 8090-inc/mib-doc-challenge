@@ -125,7 +125,16 @@ def classification_raw(truth_adj, pred_adj):
 
 
 def score(cache, truth):
-    """Full deterministic score, mirroring scripts/evaluate.py."""
+    """Full deterministic score, mirroring scripts/evaluate.py.
+
+    One deliberate simplification: the official scorer drops any field listed
+    in a case's ``unrecoverable_fields`` from both the numerator and the
+    maximum.  The public training labels carry no such column, so on this
+    corpus there is nothing to drop and the arithmetic is identical.  It does
+    mean the private extraction score should come out somewhat above the local
+    one, since the deliberately destroyed fields we cannot read are excluded
+    from the maximum there but counted as misses here.
+    """
     ext_raw = ext_max = cls_raw = 0.0
     cata = 0
     briers = []
