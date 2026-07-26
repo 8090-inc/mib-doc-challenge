@@ -7,13 +7,13 @@ records and an `APPROVED` / `DENIED` / `NEEDS_REVIEW` decision with calibrated c
 VLM, or network at runtime — only Tesseract OCR, classical image processing, and a rules engine whose
 policy was reverse-engineered from the public training labels and verified against the real documents.
 
-On the **full 1,000-case training set**, the deterministic scorer reports **123.06 / 150**
-(classification 64.46 / 80, extraction 42.69 / 50, calibration 15.91 / 20, mean Brier 0.1022) with
+On the **full 1,000-case training set**, the deterministic scorer reports **123.36 / 150**
+(classification 64.70 / 80, extraction 42.74 / 50, calibration 15.92 / 20, mean Brier 0.1020) with
 **2 catastrophic false approvals** and ~4.5 CPU-seconds per PDF, inside the 6 s budget. Output is
 byte-identical across runs, passes the official `validate_submission.py`, and is locked by a regression
 suite covering the injection, forged-note, unreadable-page, and placeholder cases.
 
-The path there was 112.27 → 116.63 → 121.74 → 123.06, and the first number is the instructive one.
+The path there was 112.27 → 116.63 → 121.74 → 123.36, and the first number is the instructive one.
 An early build measured 121 on a 145-PDF edge-case subset with zero catastrophic approvals; the full
 set then exposed **22 catastrophic false approvals**. The pipeline was treating "no risk flag read" as
 "flags = none (clean)" and approving packets whose disqualifier sat on a missing or unreadable page —
@@ -71,10 +71,18 @@ directly serves the Brier-based calibration score and reinforces the anti-false-
   image-only scans and intentionally destroyed fields (torn visa class, obscured fee, illegible
   biometrics). These are the unrecoverable/trap cases; the private scorer removes genuinely
   unrecoverable fields from the maximum, so the visible gap overstates the real loss.
-- **Over-review is the dominant score ceiling.** 159 of ~290 true approvals are routed to NEEDS_REVIEW,
-  almost entirely because a field could not be read off a degraded scan, not because the policy is
-  wrong. This is a deliberate trade: reviewing an unread packet scores +2 on a true denial versus −4 for
-  a false approval.
+- **Over-review is the dominant score ceiling — but relaxing it does not pay.** 156 of ~289 true
+  approvals are routed to NEEDS_REVIEW, almost entirely because a field could not be read off a
+  degraded scan, not because the policy is wrong. It is tempting to read that as ~9 points sitting on
+  the table, so I priced it: flipping the review buckets to APPROVED is worth **+0.83** classification
+  and takes catastrophic false approvals from **2 to 26**, and removing the evidence gate entirely is
+  worth +0.14 for four times the false approvals. Both are *dominated* by leaving the policy alone,
+  because the Brier penalty on the newly-wrong confident approvals eats the classification gain. The
+  conservative posture is not costing points.
+  The clearest case is the largest such bucket: it holds 37 true approvals against only 4 true denials,
+  but all four are packets whose disqualifying flag sits on a biometric slip that **is not in the
+  packet at all** — every other field reads cleanly and matches the truth, and no signal the pipeline
+  computes separates them from the 37. With n=4, any split I found would be chance.
 - **The decision logic is not the bottleneck — the inputs are.** Replaying the rule set against the
   *true* field values scores **78.11 / 80** on classification (289/289 approvals and 431/431 denials
   correct), so essentially all remaining classification headroom is extraction quality. The residual
@@ -100,18 +108,38 @@ directly serves the Brier-based calibration score and reinforces the anti-false-
   prompt injection *structurally* impossible rather than filtered — hidden white text simply does not
   appear in a render. These are crisp synthetic PDFs, so rendered pages OCR nearly losslessly; I would
   measure this before committing to it, but I expect it to be the single biggest architectural win.
-- **Treat closed-vocabulary fields as classification, not transcription.** `risk_flags` has nine legal
-  values and `fee_status` four, in a known font at a fixed layout. Deciding which of nine candidates a
-  smudge is — by template correlation against rendered candidates, or a small trained classifier over
-  the field region (well inside the 250 MiB artifact limit) — is a far easier problem than reading
-  arbitrary characters, and degrades more gracefully.
-- **Separate output values from decision values.** A wrong field and a missing field both score zero,
-  so emitting a best guess for every field is free upside — provided the guess is never allowed to
-  reach the adjudicator, where an invented fee or flag would be exactly how false approvals return.
+- **Treat closed-vocabulary fields as classification, not transcription** — but *not* for `risk_flags`,
+  which is where I would have aimed it first. Attributing every `risk_flags` mismatch showed **82% are
+  packets containing no biometric slip at all**: the evidence is not in the document, so no amount of
+  reading recovers it. Where a slip *is* present the emitted distribution already tracks the truth
+  (`none` at 57.6% against a true 56.8%). Deriving the flags instead from the conflict signals the
+  pipeline already computes also fails, on precision — the field is scored as an exact set match, so a
+  wrongly emitted flag *breaks a case that was previously correct*, and the candidate signals measure
+  0.31–0.33 precision (`sponsor_mismatch` never once agreed with the truth). The technique is still
+  right for genuinely-printed-but-smudged fields; `risk_flags` simply is not one.
+- **Resolution, and why it is not the answer either.** The embedded scans are ~144 dpi against a letter
+  page. Reading them larger genuinely helps — 263 of 720 fields recovered on the 80 worst packets
+  against 246 — but those packets are 8% of the corpus and the scans cap out at 3600px, so the whole
+  effect is worth about a tenth of a point, against a 6-second per-PDF limit the pipeline meets at
+  ~4.5s. Escalating resolution only for pages that already failed everything cheaper measured *worse*
+  (245 fields, 9.31 s/PDF): the retry re-runs a single preprocessing variant on exactly the pages where
+  that variant had already failed.
+- **Learning the thresholds by cross-validation — done, and mostly it says "leave them alone".** The
+  pipeline's expensive stage is OCR, so `tools/` caches the ingested pages and replays extraction,
+  canonicalization and adjudication over them; a parameter sweep costs about a second instead of a
+  full run, and every candidate is re-scored on held-out folds because picking the best of ten
+  settings on one corpus is itself a way to overfit. What it found: `STALE_DAYS` sits on a flat
+  plateau from 165 to 210 (robust, not knife-edge), the purpose and flag-margin thresholds are inert
+  over their whole plausible range, and refitting each rule's confidence to its measured accuracy
+  scores *worse* on held-out folds at every shrink strength — for a rule with true accuracy `p` the
+  Brier cost is `(c-p)^2 + p(1-p)`, so the hand-tuned constants are already at the optimum and the
+  residual is irreducible. It also caught a regression: a fuzzy-match rescue I had added on the
+  strength of one convincing example was *costing* half a point until it was swept to its real
+  optimum. A plausible mechanism is not a measurement.
 - Add a per-field confidence model and propagate it into the record-level confidence and the
-  review/approve boundary, so the system abstains precisely where it is unsure.
-- Learn the adjudication thresholds (stale window, waiver logic, MED-3 biohazard rule) with
-  cross-validation rather than hand-tuning, plus a held-out check for generalization to unseen layouts.
+  review/approve boundary, so the system abstains precisely where it is unsure. This is the one
+  remaining idea I still expect to pay: the review buckets cannot be split with the signals the
+  pipeline computes today, and a per-field reliability estimate is the missing input.
 
 ## Reproducibility
 
