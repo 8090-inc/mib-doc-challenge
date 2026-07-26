@@ -5,8 +5,56 @@ re-runs extraction, canonicalization and adjudication over cached OCR.  Kept
 because the negative results are the useful part: each one closes off a line of
 work that looks obviously promising from the outside.
 
-Baseline at the time of writing: **123.06 / 150** (classification 64.46,
-extraction 42.69, calibration 15.91, 2 catastrophic false approvals).
+Baseline: **123.05 / 150** on the full 1,000-case training set (classification
+64.70, extraction 42.43, calibration 15.92, 2 catastrophic false approvals).
+
+## What the search actually bought
+
+| change | total | catastrophic |
+|---|---|---|
+| flag rescue at threshold 62 (as first written) | 122.51 | 2 |
+| threshold swept to 66 — wins 5/5 held-out folds | 122.87 | 2 |
+| drop the redundant revoked+DIP-1+illegible short-circuit | **123.05** | 2 |
+
+The first row is the lesson: the rescue was added on the strength of a single
+convincing example (a B-13 risk panel that OCR'd as
+`"Coserved Yaga: | ing':'e_fiomet'se"`, scoring 57 against
+`illegible_biometrics` and 37 against the next flag) and it *cost* half a point
+until it was swept.  A plausible mechanism is not a measurement.
+
+## Settings that were already optimal
+
+Swept and left alone: `STALE_DAYS` (flat from 165 to 210 — robust, not
+knife-edge), `FLAG_RESCUE_MARGIN` and `FLAG_RESCUE_MINLEN` (no effect at
+threshold 66), `_PURPOSE_MIN_RATIO` (no effect from 50 to 70),
+`_REVOKED_MODE` (`trusted` costs 0.40 against `ocr`).
+
+## The over-review trade, priced
+
+158 true approvals are routed to NEEDS_REVIEW.  Each is worth +6 raw if
+rescued and −6 if the packet was really a denial, so the question is whether
+any bucket can be split.  Measured on the full corpus:
+
+| variant | total | catastrophic |
+|---|---|---|
+| baseline | 123.05 | 2 |
+| both zero-denial buckets → APPROVED | **123.31** | **2** |
+| `unverified_clean` → APPROVED | 123.21 | 8 |
+| `med3_no_biometric` → APPROVED | 123.15 | 10 |
+| `_GATE=all` (no evidence gate at all) | 123.19 | 8 |
+
+Every aggressive variant is *dominated*: flipping whole review buckets to
+APPROVED gains less than the safe change and multiplies false approvals,
+because the Brier penalty on the newly-wrong confident approvals eats the
+classification gain.  The conservative posture is not costing points here.
+
+`unverified_clean` is the clearest case.  It holds 37 true approvals against
+only 4 true denials, but all four are packets whose disqualifying flag
+(`memory_tampering`, `planetary_embargo`, `biohazard_red`) sits on a B-13 slip
+that is **not in the packet at all** — every other field reads cleanly and
+matches the truth, and no computed signal separates them from the 37.  With
+n=4 any apparent split would be chance.  The bucket cannot be split on the
+available evidence, so it stays in review.
 
 ## Where the extraction points actually are
 
