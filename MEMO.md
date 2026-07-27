@@ -5,10 +5,10 @@
 | Section | Score | Honest 5-fold OOF |
 | --- | ---: | ---: |
 | Field extraction | 41.3 / 50 | 41.3 |
-| Classification | 66.8 / 80 | 60.7 |
-| Confidence calibration | 16.6 / 20 | 14.6 |
+| Classification | 67.0 / 80 | 62.6 |
+| Confidence calibration | 16.4 / 20 | 14.6 |
 | Missing-case penalty | −0.0 | −0.0 |
-| **Total** | **124.7 / 150** | **~116** |
+| **Total** | **124.8 / 150** | **~118.5** |
 
 Runtime: ~1.2 s/PDF on 4 vCPU (budget: 6 s/PDF). All 1000/1000 cases answered.
 The in-sample numbers use a model fitted on all train labels; the OOF column is
