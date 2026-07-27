@@ -1,9 +1,9 @@
 # MIB Doc Challenge — technical memo
 
 **Score on the public training split (challenge `scripts/evaluate.py`):**
-`115.62 / 150` — extraction `40.39/50`, classification `59.79/80`, calibration
-`15.44/20`, 0 missing cases, 9 catastrophic false approvals against 431 true
-denials. Runtime 0.94 s/PDF on 4 vCPU against a 6 s/PDF budget; image 0.23 GiB.
+`116.51 / 150` — extraction `40.39/50`, classification `60.72/80`, calibration
+`15.40/20`, 0 missing cases, 6 catastrophic false approvals against 431 true
+denials. Runtime 0.78 s/PDF on 4 vCPU against a 6 s/PDF budget; image 0.23 GiB.
 
 No LLM, no network, no API keys. PyMuPDF for the text layer, OpenCV + Tesseract
 for scans, a hand-written policy engine, and one 26-weight logistic model for
@@ -82,6 +82,17 @@ deterministic: disqualifying flag → denied (186/186), `TRANSIT-7` → denied
 waiver language does *not* rescue an unpaid fee), unknown fee → review (44/44).
 Review-only flags are review 78% of the time and denial the rest.
 
+**Staleness needed a reference the packets don't contain.** The manual calls an
+application stale more than 180 days before *packet receipt*, and no packet
+states its receipt date. The signal is real — among otherwise-clean packets,
+2025 arrival dates run 12 approved to 25 denied while 2026-01 onward runs 254 to
+13 — so "now" is estimated from the batch's own arrival dates at the 95th
+percentile. Not the maximum: a single OCR misreading of 2026 as 2076 would make
+every other packet look stale, which is exactly what happened on my first
+attempt. Judged below the adjudicator note so a signed verdict still wins. Worth
++0.87 classification points, and it drops false approvals from 10 to 6. The gain
+is flat from a 180- to a 240-day threshold, so it is not fitted to one cutoff.
+
 Applying this order to *ground-truth* fields scores 70.4/80 with 89.2% accuracy —
 so the policy is essentially at its ceiling and my remaining classification gap
 is an extraction gap, not a policy gap. I searched all orderings of the
@@ -109,10 +120,24 @@ in-sample 0.114 is optimistic.
 
 ## Failure modes I know about
 
-- **Unreadable scans dominate the loss.** ~600 scanned pages still yield no
-  usable classification. That is most of the 209 packets sent to review for an
-  unread risk panel that should have been decided outright, and most of the
-  missing `sponsor_id` and `arrival_date` values.
+- **Unreadable scans dominate the loss, but less of it is recoverable than the
+  correlation suggests.** Extraction accuracy is 96.1% on packets needing no OCR,
+  83.3% when the scans are readable, and 71.8% when a page cannot be classified
+  at all. I assumed classification was the bottleneck and made page kinds
+  inferable from the fields a page parsed rather than its heading; that fixed ~30
+  page kinds and moved the score by zero, because those pages were already
+  contributing their fields regardless of kind. The remaining unreadable pages
+  are genuinely destroyed ink, not mislabelled ones, so the correlation between
+  "has an unreadable page" and "scores badly" is substantially confounded by
+  damage that no OCR would recover.
+- **Over-review is the largest single bucket and is not a rules problem.** 264
+  packets are sent to review that should have been decided — nominally 15.8
+  classification points. I tested every subgroup: no biometric page, fully
+  native text, all pages classified, all seven core fields recovered. Approving
+  scores worse than reviewing in every one of them; even the cleanest subgroup
+  (121 packets, fully native, complete fields) splits 64 approved to 29 denied,
+  where approving nets 396 raw points against 410 for reviewing. Those points
+  need evidence, not a threshold.
 - **Sponsor IDs are the weakest field.** They are 4 random digits with no
   vocabulary to snap to, and some are deliberately smudged. Digit-confusion
   repair helps but cannot verify.
@@ -131,8 +156,9 @@ in-sample 0.114 is optimistic.
 
 1. **Template-registered field OCR.** The forms have fixed layouts. Registering a
    detected page against a template and OCR'ing fixed field boxes — instead of
-   discovering lines — would recover fields on pages too degraded to segment,
-   which is exactly where I'm losing points.
+   discovering lines — would recover fields on pages too degraded to segment.
+   I now think this is the only remaining lever of real size, having ruled out
+   the cheaper version (better page classification bought nothing).
 2. **Train a small character classifier on the rendered fonts.** The generator
    uses a handful of fonts at known sizes; a few-hundred-KB CNN over segmented
    glyphs would likely beat Tesseract on this specific degradation, and fits the
