@@ -236,29 +236,59 @@ def extract_case(pdf_path: Path) -> dict:
 
 
 def batch_receipt_clock(all_cases) -> date:
-    """Batch-wide stand-in for 'now' when a packet has no receipt date:
-    a high percentile of plausible dates seen across the batch (robust to
-    isolated OCR misparses producing far-future years)."""
-    receipts = []
-    others = []
+    """Batch-wide stand-in for 'now' when packets carry no receipt date.
+
+    OCR occasionally misreads years (2026 -> 2028), so neither max nor a
+    global percentile is safe. Instead: anchor on the median date, keep only
+    dates inside a +/-300-day window around it (the generator's actual intake
+    window), and take a high quantile within that window."""
+    pool = []
     for case in all_cases:
-        r = parse_date(case.get("values", {}).get("receipt_date", "") or "")
-        if r and "2020-01-01" <= r <= "2035-12-31":
-            receipts.append(r)
-        a = parse_date(case.get("values", {}).get("arrival_date", "") or "")
-        if a and "2020-01-01" <= a <= "2035-12-31":
-            others.append(a)
-    pool = sorted(receipts or others)
+        for key in ("receipt_date", "arrival_date"):
+            d = parse_date(case.get("values", {}).get(key, "") or "")
+            if d and "2020-01-01" <= d <= "2035-12-31":
+                pool.append(d)
     if not pool:
         return date(2026, 7, 1)
-    idx = min(len(pool) - 1, int(0.995 * (len(pool) - 1) + 0.5))
-    return date.fromisoformat(pool[idx])
+    pool.sort()
+    med = date.fromisoformat(pool[len(pool) // 2])
+    window = [d for d in pool
+              if abs((date.fromisoformat(d) - med).days) <= 300]
+    if not window:
+        return med
+    idx = min(len(window) - 1, int(0.98 * (len(window) - 1) + 0.5))
+    return date.fromisoformat(window[idx])
+
+
+def repair_arrival(arrival_iso, clock: date):
+    """Correct the classic year-misread (2026->2028) when the corrected date
+    falls inside the batch window; flag implausible dates as unreliable.
+
+    Returns (corrected_iso_or_None, reliable: bool)."""
+    if not arrival_iso:
+        return None, False
+    d = date.fromisoformat(arrival_iso)
+    lo, hi = clock.toordinal() - 700, clock.toordinal() + 90
+    if lo <= d.toordinal() <= hi:
+        return arrival_iso, True
+    for shift in (2, 1):  # 8<-6 and 7<-6/1 digit confusions in the year
+        try:
+            cand = d.replace(year=d.year - shift)
+        except ValueError:
+            continue
+        if lo <= cand.toordinal() <= hi:
+            return cand.isoformat(), True
+    return arrival_iso, False
 
 
 def belief_from_case(case: dict, clock: date) -> CaseBelief:
     values = case.get("values", {})
     confs = case.get("confs", {})
     arrival = parse_date(values.get("arrival_date", "") or "")
+    if arrival:
+        arrival, reliable = repair_arrival(arrival, clock)
+        if not reliable:
+            arrival = None  # implausible date: treat as unreadable
     receipt = parse_date(values.get("receipt_date", "") or "")
     stamps = case.get("stamps", [])
     kinds = [k for k, _, _ in stamps]
@@ -365,6 +395,13 @@ def finalize_case(case: dict, all_cases) -> dict:
     for field_name in evidence_mod.OUTPUT_FIELDS:
         if field_name == "risk_flags":
             row[field_name] = "|".join(sorted(flags)) if flags else "none"
+        elif field_name == "arrival_date":
+            raw = values.get("arrival_date")
+            if raw:
+                fixed, reliable = repair_arrival(parse_date(raw) or raw, clock)
+                row[field_name] = fixed if reliable else raw
+            else:
+                row[field_name] = FIELD_PRIORS[field_name]
         else:
             row[field_name] = values.get(field_name) or FIELD_PRIORS[field_name]
     row["adjudication"] = adjudication
