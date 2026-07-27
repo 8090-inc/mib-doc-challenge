@@ -1,9 +1,9 @@
 # MIB Doc Challenge — technical memo
 
 **Score on the public training split (challenge `scripts/evaluate.py`):**
-`116.51 / 150` — extraction `40.39/50`, classification `60.72/80`, calibration
+`116.88 / 150` — extraction `40.76/50`, classification `60.72/80`, calibration
 `15.40/20`, 0 missing cases, 6 catastrophic false approvals against 431 true
-denials. Runtime 0.78 s/PDF on 4 vCPU against a 6 s/PDF budget; image 0.23 GiB.
+denials. Runtime 0.84 s/PDF on 4 vCPU against a 6 s/PDF budget; image 0.23 GiB.
 
 No LLM, no network, no API keys. PyMuPDF for the text layer, OpenCV + Tesseract
 for scans, a hand-written policy engine, and one 26-weight logistic model for
@@ -63,11 +63,18 @@ evidence precedence (note > intake > biometric > sponsor > registry) plus a bonu
 for a clean text layer over OCR. Case id comes from the per-page footer, which
 survives in the text layer even on scans — not from the filename.
 
-**Vocabulary snapping** with a similarity floor *and* a margin check: a reading
-that is nearly equidistant between two vocabulary entries is rejected rather than
-guessed, and a value that matches nothing passes through unchanged. That is what
-should keep the gazetteer from silently corrupting unseen values on the private
-test set.
+**Vocabulary snapping, and what the scoring asymmetry implies.** A wrong
+extraction and a blank score identically — zero — so refusing an ambiguous match
+buys nothing and forfeits the chance of being right. Below the strict threshold
+the normalizer therefore still names the nearest entry, flagged as a guess.
+
+The flag is what makes that safe. A guess is reported for extraction, but the
+rules engine treats it exactly as a field it never recovered, so a guessed
+`TRANSIT-7` or `Wolf-1061c` can never deny an applicant. The invariant is
+checkable and I checked it: classification is bit-identical either way, 60.72/80
+with the same 6 false approvals, while extraction rises. Fields whose value comes
+from a regex rather than a vocabulary — sponsor id, dates — have no meaningful
+"nearest" reading and stay strict.
 
 ## The adjudication policy
 
@@ -140,7 +147,12 @@ in-sample 0.114 is optimistic.
   need evidence, not a threshold.
 - **Sponsor IDs are the weakest field.** They are 4 random digits with no
   vocabulary to snap to, and some are deliberately smudged. Digit-confusion
-  repair helps but cannot verify.
+  repair helps but cannot verify, and unlike the vocabulary fields there is no
+  defensible guess to fall back on — 253 are still blank.
+- **Applicant-name precision looks like a bug and isn't worth fixing.** 152 names
+  are wrong, half confidently snapped to real-but-incorrect lexicon entries.
+  Tightening the threshold would genuinely reduce that, but it converts *wrong*
+  into *blank* and both score zero.
 - **The gazetteer is a generalisation risk.** If the private test introduces new
   species or worlds, the threshold and margin check should pass them through
   unchanged rather than snap them — but they would then be raw OCR, and less
