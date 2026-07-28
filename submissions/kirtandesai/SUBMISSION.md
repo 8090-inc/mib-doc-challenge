@@ -1,4 +1,4 @@
-# Submission — kirtandesai
+# Submission: kirtandesai
 
 - **Solution repository:** https://github.com/kirtandesai/mib-doc-solution
   (Dockerfile at repo root; image accepts `<input_pdf_dir> <output_predictions_path>`;
