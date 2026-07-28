@@ -1,168 +1,139 @@
 # MIB Doc Challenge — Technical Memo
 
-**Score on the 1,000-case public training set: 119.33 / 150** — extraction 41.70/50,
-classification 62.36/80, calibration 15.27/20, 14 catastrophic false approvals.
-0.82 s/PDF over the full 5,000-case validation set against a 6 s budget (4,082 s
-of the 30,000 s allowance); 0.86 GiB image against a 4 GiB cap; two runs
-byte-identical.
+## Result
 
-The submitted `predictions.jsonl` covers all 5,000 validation cases with no
-missing ids. Its adjudication mix (41% NEEDS_REVIEW, 39% DENIED, 20% APPROVED)
-matches the training mix to within a point, and mean reported confidence, 0.719,
-equals training accuracy — the pipeline is behaving the same way on unseen data
-as on the set it was built against.
+The submitted pipeline is offline, CPU-only, and deterministic by construction.
+On all 1,000 public training packets it produced 1,000 valid records with no
+missing, extra, duplicate, or schema-invalid cases and scored **122.31 / 150**:
+41.70/50 extraction, 64.72/80 classification, and 15.89/20 calibration. It made
+**10 catastrophic false approvals**. Two independent full runs are byte-identical.
+
+Against the previous 119.33 checkpoint that is +2.98 total with four *fewer*
+false approvals — the gain is in classification (+2.36) and calibration (+0.62),
+with extraction flat. The improvement is not a better-tuned posterior. It comes
+from declining points the fitted probabilities offered: the largest single change
+forbids approval at one terminal, which costs classification points and buys back
+more in avoided −4 penalties and in calibration.
 
 ## Approach
 
-The pipeline is five stages, deliberately classical throughout. No LLM or VLM runs
-at inference time.
+**Trust boundary first.** Every PDF glyph is classified before extraction.
+White-on-white, sub-2-point, and off-crop text is quarantined, and downstream
+code sees only visible evidence. Visible fake answer keys are also removed as
+bounded blocks, including multi-line keys with labelled fields below a banner.
+The bounds and payload-shape checks prevent an innocent prose mention of
+“answer key” from deleting the rest of a page.
 
-**1. Ingest with a trust boundary.** Every glyph is classified visible or
-quarantined at parse time — white-on-white, sub-2pt, or outside the page crop —
-and downstream code only ever sees visible text. This is the highest-value
-component in the build. Measured over 250 training packets, 22.4% carry an
-injected answer key whose *field values are 93.2% correct* but whose
-*adjudication is 0% correct*, skewed 48 APPROVED to 8 DENIED. The bait and the
-punishment sit on different scoring axes: trusting hidden text is rewarded on
-extraction and walks into the −4 bucket on roughly a fifth of the corpus.
+This is the highest-value defence in the system. In a measured 250-packet sample,
+56 packets (22.4%) carried an injected answer key. Its field values were 93.2%
+correct, but its adjudication was 0% correct and skewed 48-to-8 toward approval.
+A naive extractor is therefore rewarded for following the decoy on one scoring
+axis and driven into the −4 false-approval bucket on another.
 
-Answer keys are also stripped from *visible* text. FIELD_MANUAL.md lists "fake
-answer keys" separately from "hidden white text", so a key is untrusted whether or
-not it is rendered. Every training injection happens to be hidden; nothing
-guarantees that privately. The visible pattern is deliberately narrower than the
-hidden one — it excludes `(approve|deny) this case`, because a legitimate signed
-adjudicator note (the manual's rank-1 evidence) could plausibly read "Approve this
-case", and redacting that would manufacture false denials.
+**Text first, selective OCR.** In a 120-packet sample, 71.7% of pages had a
+usable text layer; only 28.3% required OCR. Those pages use three unioned
+Tesseract passes: baseline layout analysis, an eroded render that reconnects
+stroke-damaged glyphs, and sparse-text mode for forms that ordinary layout
+analysis treats as images. Unioning preserves evidence unique to any pass.
+Denoising was excluded after measurement: it increased OCR cost by 56% and
+changed mean field accuracy by −0.2%.
 
-The visible-key defence is **line-scoped, and that is a known gap**: redaction
-drops the visual line carrying the marker, so a multi-line key — an `ANSWER KEY`
-header with labelled fields beneath it — survives with only its header removed.
-Worse, `Finding:` on a surviving line is currently accepted as rank-1 adjudicator
-evidence without requiring adjudicator-note context. Every training injection is
-hidden-text and therefore quarantined upstream, so this costs nothing measurable
-here, but it is a real exposure on a private set that renders its decoys.
+**Extraction follows document authority.** Closed vocabularies are normalized
+with bounded fuzzy repair; ambiguous terms such as `paid` require label
+anchoring because they occur inside other values. Manual corrections and
+sponsor-attestation prose have explicit parsers. Pages are typed from their
+printed titles, and conflicting scalar values resolve using the field manual's
+order—adjudicator note, intake form, biometric slip, sponsor attestation,
+registry extract—before confidence or page order. A regression probe puts
+`SPN-2222` on an intake form and `SPN-1111` on a sponsor letter; the intake value
+wins in both page orders.
 
-**2. OCR only where needed, in three unioned passes.** 71.7% of pages carry a
-usable text layer, so OCR is gated behind a sufficiency check — 1.22 pages per
-packet instead of 4.30. Three passes are unioned because each is strictly better
-on some pages: the baseline `--psm 3`; a pass on an eroded render, which
-reconnects stroke-eroded glyphs (it recovered `Fee Status: paid` on a receipt
-where the baseline read only the header); and a sparse `--psm 11` pass, because
-psm 3's layout analysis discards a speckled form as a picture block. That last
-pass alone recovered the disqualifying `biohazard_red` flag on a packet the
-pipeline had been falsely approving.
+`applicant_name` is the one open-vocabulary field, so it has no vocabulary to
+check a candidate against, and its Title-Case pattern is the exact shape of a
+neighbouring label. Where the name was blank the window slid onto the next label
+and returned it: 136 of 4,690 non-blank names in an earlier build read `Species
+Code`, `Home World`, or an OCR-damaged variant such as `Species Home Workt`.
+Candidates containing any field-label word are now skipped and the scan
+continues to the next window and then to the attestation sentence. No true
+training name contains such a word in any position, so the rule discards nothing
+the corpus relies on, and an unreadable name yields a blank that widens the
+posterior instead of a confident wrong answer.
 
-**3. Extraction, strategy chosen per field.** Distinctive closed enums are scanned
-across the whole page; ambiguous vocabularies (`fee_status`, `declared_purpose`)
-require label anchoring, because "paid" is a substring of "unpaid". Values are
-snapped to vocabulary with fuzzy matching so OCR damage is repaired rather than
-dropped. Labels are fuzzy-matched too, but only as a fallback, since OCR mangles
-labels as readily as values (`Applicant:` reads as `icant:`).
+**Policy is declarative; decisions are score-aware.** `rules/policy.yaml` orders
+named terminals and `mib/policy.py` implements one predicate per terminal.
+Runtime class posteriors are fitted on the pipeline's own extracted fields, not
+ground truth, so unread evidence is represented in the probabilities. A stale
+`DIP-1` packet has its own fitted terminal: the measured ground-truth population
+contains 32/32 denied non-diplomatic stale cases, while 15 stale diplomatic
+cases contain 12 approved, 3 review, and no denials.
 
-Two structures in the corpus needed explicit handling. A **manual correction note**
-(`Manual correction: applicant is Soldane Ludane`) appears on 136 of 1,000 packets
-and supersedes the form field it names — the manual ranks a signed note first,
-above intake form fields at rank 2. And the **sponsor attestation letter** states
-the applicant in prose with no label at all (`attests that <name> is expected`),
-which is safe to match only because the value is pinned on both sides by template
-text.
+The final action maximizes expected challenge points rather than posterior
+argmax. For probabilities \(p,q,r\) of approval, denial, and review:
 
-**4. Policy as a declarative cascade.** `rules/policy.yaml` orders ~11 named
-terminals (`clean`, `med3_no_check`, `embargoed_dip`, `fee_waived_nondip`, …);
-`mib/policy.py` holds one predicate per terminal. Keeping the ordering declarative
-made the policy auditable against FIELD_MANUAL.md line by line.
-
-**5. Expected-value decision layer.** Argmax is the wrong rule under this rubric.
-Writing p, q, r for P(APPROVED), P(DENIED), P(NEEDS_REVIEW):
-
-```
-EV(APPROVED) = 8p − 4q + r      EV(DENIED) = 8q + r      EV(NEEDS_REVIEW) = 2p + 2q + 8r
+```text
+EV(APPROVED)     = 8p - 4q + r
+EV(DENIED)       =      8q + r
+EV(NEEDS_REVIEW) = 2p + 2q + 8r
 ```
 
-Class posteriors are fitted per terminal, conditioned on how much decisive
-evidence was actually recovered — that conditioning is what stops the rule
-approving packets it merely failed to read. Confidence is reported as the
-posterior mass on the chosen class, which is the Brier-optimal report; an earlier
-build multiplied it by an evidence factor, and removing that gained 1.07
-calibration points. Two fitted recalibrations were tried on top and both lost
-under 5-fold CV, so the posterior is reported unmodified.
+Reported confidence is the posterior probability of the chosen class, which is
+the proper quantity for the evaluator's Brier term.
 
-## Failure modes
+**Where the EV rule is overridden, it is overridden by a stated rule.**
+`never_approve_terminals` lists terminals whose defining condition is *missing
+required evidence*, and approval is removed from the candidate set there
+regardless of what the posterior says. `med3_no_check` is the entry that matters:
+MED-3 requires a clean biohazard check, no packet in the corpus states one, so
+the bucket is by construction the set whose required check is absent. The fitted
+posterior sits at 0.61 APPROVED and the EV rule would approve it for +0.69
+classification points.
 
-**The headline extraction gap is mostly not recoverable.** Every miss was triaged
-by where the truth value actually lives. Measured at an earlier checkpoint of
-40.56/50, the 9.44 points then outstanding split as:
+That +0.69 was declined. Taking it would double the pipeline's catastrophic
+false approvals from 10 to 20; it is worth roughly 0.5 net once the calibration
+gain from hedging is counted; and it bets that the public 63%-approved MED-3 mix
+holds privately on a posterior fitted from 51 packets. Every runtime-visible split of the bucket was
+tested first — biometric-slip presence, registry extract, page count, OCR
+fraction, extraction completeness, quarantine volume, fee status — and none
+separates it; the only splits that "won" were label-fitted cells of one to nine
+cases that the 25-case support floor discards anyway.
 
-| | points | |
-|---|---|---|
-| visible, we misread it | 1.82 | the only real target |
-| present only in quarantined text | 2.68 | recovering these means following an injection |
-| absent from the page entirely | 4.93 | EVALUATION.md drops many of these from the case maximum |
+The constraint lives in the policy file rather than inside a tuned probability
+on purpose. The posterior keeps describing what the training data actually did,
+and a reviewer can see the judgement call and disagree with it.
 
-That triage is what directed the rest of the work — extraction has since moved to
-41.70, so roughly two thirds of the genuinely recoverable pool has been taken, and
-two fields (`home_world`, `species_code`) had **zero** recoverable misses to begin
-with. Chasing the headline number instead would have meant optimising against
-evidence that is either forbidden or absent.
+## Failure modes and another week
 
-So the local extraction score is a **lower bound**: `train_labels.csv` omits the
-admin `unrecoverable_fields` column, and the evaluator charges for fields the real
-scorer excludes. One packet carries `fee_status=paid` in truth with no fee receipt
-page at all.
+The largest remaining extraction losses are not all recoverable. At an earlier
+40.56/50 checkpoint, the 9.44 missing points split into 1.82 points of visible
+evidence the pipeline misread, 2.68 points present only in quarantined text, and
+4.93 points absent from the PDF. Private scoring removes genuinely
+unrecoverable fields from a case's maximum, while the public labels do not
+contain that metadata.
 
-**Over-hedging is the largest classification loss, and it is close to
-irreducible.** 157 cases hedge to NEEDS_REVIEW when truth is APPROVED or DENIED —
-9.42 of 80 points, versus 1.68 for the 14 false approvals. The −4 penalty draws
-the eye, but hedging costs five and a half times more. The EV rule is optimal
-*given the posterior*, though, so the only lever is sharper conditioning, and six
-schemes were tested under identical 5-fold CV. Every one that meaningfully cut
-hedging bought it with false approvals (a confidence floor gained 0.44 points for
-+10 FAs; adding OCR-load *lost* 0.96 points and added 12). Every FA-neutral scheme
-gained ≤0.18 points against a fold-to-fold standard deviation of 1.61 — an order
-of magnitude inside the noise. Further, roughly a third are
-`arrival_date_missing`, where FIELD_MANUAL.md:73 *prescribes* NEEDS_REVIEW;
-hedging there is compliance, not error.
+The highest-priority engineering gap is multi-applicant isolation. The manual
+warns that one packet may contain several applicants, with the active `case_id`
+selecting the relevant one. Page typing now enforces authority for conflicting
+scalar values, but it does not yet associate every page with the active
+applicant. Applicant-name reconciliation also remains a repetition/native-text
+heuristic rather than a full identity graph.
 
-**The 14 residual false approvals are dominated by unreadable evidence.** For 9 of
-10 flagged cases the truth flag appears in neither visible nor quarantined text.
-One case carries it in hidden text only, where the manual forbids trusting it —
-using it would be following the injection.
+Other private-set risks are unobserved hidden carriers (non-rendering text mode,
+occlusion, optional-content groups, annotations, metadata, and barcode
+payloads), damaged page titles that defeat deterministic page typing, and
+adjudicator stamps printed as images on otherwise text-rich pages. With another
+week I would add adversarial fixtures for those carriers, active-case page
+association, and stamp detection that runs independently of the text-sufficiency
+OCR gate.
 
-**Known weak spots.** Damaged-label recovery is heuristic and tuned on one corpus.
-The free-text name reconciliation assumes OCR variants of one name cluster more
-tightly than two different people on the same packet, which held here but is not
-guaranteed. Erosion repair helps speckled pages and hurts tight glyph pairs, which
-is why passes are unioned rather than substituted.
+## Reproducibility
 
-## With another week
+The image accepts exactly `<input_pdf_dir> <output_predictions_path>`. It ships
+only deterministic Python code, Tesseract/Poppler, the policy files, and pinned
+runtime dependencies. No LLM, VLM, cloud OCR, API key, validation answer, or
+case-id lookup table is present. Development models were used only as analysis
+instruments; every runtime behavior they motivated was reimplemented as
+deterministic code and covered by ordinary tests or measured corpus probes.
 
-1. **Multi-applicant packets.** FIELD_MANUAL.md warns a packet can contain pages
-   for more than one applicant and the active `case_id` decides which. Nothing in
-   the pipeline enforces that today; field resolution votes across all pages
-   regardless of whose page it is. This is the clearest correctness gap.
-2. **Page-type classification.** Every page is currently treated as an
-   undifferentiated bag of labels. Classifying pages (intake form / biometric slip
-   / sponsor attestation / registry extract / adjudicator note) would let field
-   resolution follow the manual's precedence order explicitly instead of by vote,
-   and would fix (1) as a side effect.
-3. **Better use of the damage markers.** The corpus prints explicit markers
-   (`[NAME CUT OUT]`, `[DATE WASHED OUT]`). Detecting them would let the pipeline
-   distinguish "unreadable" from "absent" and report calibrated uncertainty rather
-   than an empty field.
-4. **Cross-page evidence conflict.** Where two pages disagree on a decisive field,
-   the resolution is a confidence vote. It should be the manual's precedence list.
-
-## Notes on method and tooling
-
-Development used local and free-tier hosted models as **analysis instruments
-only** — reading rendered pages to find what the deterministic OCR was missing,
-and triaging failures. Two false approvals were located that way, and one was
-fixed by a purely deterministic OCR change as a result. **No model of any kind
-runs in the submitted pipeline**, which is offline, CPU-only, and free of network
-calls; EVALUATION.md:70 forbids it and the runtime is clean. No validation answers
-are hardcoded, no lookup tables are keyed to case ids, and no absolute paths
-appear in the runtime path. Case ids that appear in source comments record which
-packet motivated a measurement; no behaviour depends on them.
-
-Every number in this memo is measured on the public training set with the
-challenge's own `scripts/evaluate.py`, not estimated.
+The repository includes the exact offline/read-only Docker command, 93 unit and
+adversarial regression tests, the public scoring commands, and `docs/RECON.md`
+with the measurements and rejected experiments behind the design.

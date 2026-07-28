@@ -5,7 +5,7 @@
 https://github.com/scking21/mib-solution
 
 The predictions in this folder were produced by commit
-[`babff09`](https://github.com/scking21/mib-solution/commit/babff090a52c351f4826c39783ef210ef61c1706).
+[`19a6643`](https://github.com/scking21/mib-solution/commit/19a6643d02cdd0a39f82127a92e87dfa8733c5c6).
 
 The repository contains the `Dockerfile` at its root, along with the `mib/`
 package, `rules/` (policy and fitted posteriors), `run.sh`, and `tests/`.
@@ -57,11 +57,11 @@ Scored with the challenge's own `scripts/evaluate.py`:
 | Section | Score |
 |---|---|
 | Field extraction | 41.70 / 50 |
-| Classification | 62.36 / 80 |
-| Confidence calibration | 15.27 / 20 |
+| Classification | 64.72 / 80 |
+| Confidence calibration | 15.89 / 20 |
 | Missing-case penalty | −0.00 / 10 |
-| **Deterministic total** | **119.33 / 150** |
-| Catastrophic false approvals | 14 |
+| **Deterministic total** | **122.31 / 150** |
+| Catastrophic false approvals | 10 |
 
 See `MEMO.md` for the approach, the failure-mode analysis behind those numbers,
 and what the remaining headroom actually consists of.
