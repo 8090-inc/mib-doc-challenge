@@ -1,9 +1,9 @@
 # MIB Doc Challenge — technical memo
 
 **Score on the public training split (challenge `scripts/evaluate.py`):**
-`120.29 / 150` — extraction `42.55/50`, classification `62.01/80`, calibration
-`15.73/20`, 0 missing cases, 8 catastrophic false approvals against 431 true
-denials. Runtime 1.00 s/PDF on 4 vCPU against a 6 s/PDF budget; image 0.32 GiB.
+`121.60 / 150` — extraction `42.55/50`, classification `63.00/80`, calibration
+`16.05/20`, 0 missing cases, 8 catastrophic false approvals against 431 true
+denials. Runtime 0.55 s/PDF on 4 vCPU against a 6 s/PDF budget; image 0.32 GiB.
 
 No LLM, no network, no API keys. PyMuPDF for the text layer, PP-OCRv4 via ONNX
 Runtime for scans, a hand-written policy engine, and one 27-weight logistic
@@ -59,7 +59,7 @@ than every other change I made combined:
 | Extraction | 40.69 | **42.55** |
 | Classification | 60.68 | **62.01** |
 | Adjudication accuracy | 69.8% | **72.1%** |
-| Total | 116.71 | **120.29** |
+| Total | 116.71 | **120.29** (later 121.09 with a policy fix; see below) |
 
 The per-field gains land exactly where the old pipeline was weakest —
 `sponsor_id` 65.8 → 78.7%, `arrival_date` 78.9 → 87.9%, `visa_class` 80.4 →
@@ -98,6 +98,49 @@ from a regex rather than a vocabulary — sponsor id, dates — have no meaningf
 "nearest" reading and stay strict.
 
 ## The adjudication policy
+
+**A policy gap found by looking at where extraction was already correct.**
+After the engine swap I went looking for cases where the extracted fields
+matched the labels exactly and the packet was *still* adjudicated wrong - that
+isolates a pure policy bug from an extraction one. Several were denied on
+`revoked_sponsor` or `embargo_home_world` with a correctly-read `DIP-1` visa.
+
+The manual states a sponsor is required "unless they are applying under
+DIP-1" - a diplomatic packet has no work-authorization sponsor relationship to
+revoke in the first place. The training labels show the same shape for the
+embargo, which the manual doesn't state explicitly: every non-DIP-1
+Wolf-1061c packet is denied (51/51), while DIP-1 ones split 11 approved / 10
+review / 5 denied on other grounds. I checked disqualifying risk flags for the
+same pattern before changing anything - they deny DIP-1 packets uniformly
+(34/34) and are correctly left alone. Fixing the other two: classification
+62.01 -> 62.52, calibration 15.73 -> 16.02 on refit, total 120.29 -> 121.09.
+
+I also re-swept the staleness threshold against the corrected policy in case
+the interaction shifted the optimum; 240 days is still the peak (62.52),
+confirming that channel is exhausted rather than just untried.
+
+**A field I had extracted but never used.** `registry_status` was on the
+`Packet` object and reached the dev cache tool, but `main.py`'s runtime record
+never included it - the signal was inert in the shipped image. Its
+`EMBARGO REVIEW` value turned out to be a direct, registry-verified check that
+denies regardless of visa class (DIP-1 packets carrying it are 7/9 denied, not
+the clean split the home-world-name embargo gets), and it names worlds beyond
+Wolf-1061c (`TRAPPIST-1e`, `Eris Relay` both appear). Wiring it in and testing
+both a DIP-1-exempt and a uniform version before choosing: uniform wins, +0.40
+against +0.29. Classification 62.52 -> 63.00, total 121.09 -> 121.60.
+
+**A rule I measured, believed, and reverted.** The manual: `waived` is
+acceptable "only for DIP-1 or a visible hardship waiver" - and no training
+packet ever prints "hardship", so a non-DIP-1 waiver looked like it should be
+at least a review trigger. Stripped of every other denial reason, those
+packets do split 46 review / 37 approved / 10 denied, which reads like a
+real signal. But the *marginal* population - packets the existing rules
+already approve, that this one would newly flip to review - is only 55, and
+67% of those are truth `APPROVED`, because rules already covering the
+review-flag and fee-unknown cases had already caught the ones that needed
+catching. Net effect: -1.05 points. The lesson worth keeping is to isolate
+the marginal population a rule change actually touches before trusting the
+label distribution of the population matching its *condition*.
 
 The public manual covers most of it; the rest I read off the training packets'
 own adjudicator notes, which cite their reasons in plain text. That surfaced two
@@ -191,11 +234,33 @@ in-sample 0.114 is optimistic.
 
 ## What I would do with another week
 
-1. **A recogniser fine-tuned on these fonts.** The engine swap showed how much
-   was left on the table in recognition alone; the generator uses a handful of
-   fonts at known sizes, so fine-tuning the PP-OCR recogniser on synthetic
-   renders of them should beat the general model, and would fit the artifact
-   limits easily. I would try this before anything else.
+1. **Not a task-specific recogniser — I tried it and it lost.** The obvious next
+   step looked like training on this generator's output, and the data comes free:
+   `train_labels.csv` gives the true value for every field, the detector gives
+   the line box, so 3,155 genuinely-degraded line crops can be harvested with
+   exact labels and no annotation. For the closed-vocabulary fields the target is
+   a *class*, not a character sequence, which is a far easier problem — 12 species
+   codes rather than arbitrary text. I trained a small CNN per field on a GPU,
+   splitting by packet so no case straddled the split.
+
+   It lost on every field, against the same held-out packets:
+
+   | Field | Trained classifier | PP-OCR + vocabulary snapping |
+   | --- | ---: | ---: |
+   | species_code | 81.7% | **98.3%** |
+   | home_world | 68.6% | **92.8%** |
+   | visa_class | 54.8% | **81.7%** |
+   | declared_purpose | 54.1% | **85.9%** |
+   | fee_status | 64.7% | **70.8%** |
+
+   The ceiling is data volume: ~500-900 crops per field is roughly 50 examples
+   per class, against a recogniser pretrained on millions of images. This does
+   not prove the idea is unworkable — genuine fine-tuning from the PP-OCR weights,
+   or synthetic renders in the four fonts the generator uses (Helvetica,
+   Helvetica-Bold, Times-Roman, Helvetica-Oblique) to lift the volume, could
+   still clear the bar. But it does mean the cheap version of the idea is dead,
+   and I would want that volume problem solved before spending more on it.
+
 2. **Train a small character classifier on the rendered fonts.** The generator
    uses a handful of fonts at known sizes; a few-hundred-KB CNN over segmented
    glyphs would likely beat Tesseract on this specific degradation, and fits the
