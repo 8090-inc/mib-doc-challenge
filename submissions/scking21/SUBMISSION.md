@@ -30,25 +30,48 @@ docker run --rm --network none \
 
 | Requirement | Status |
 |---|---|
-| Runs offline (`--network none`) | verified in-container — 25-PDF smoke test under the invocation above |
+| Image builds | verified against the submitted commit — `docker build --platform linux/amd64` |
+| Runs offline (`--network none`) | verified in-container — 25-PDF run under the invocation above |
 | Image size ≤ 4 GiB uncompressed | **0.86 GiB** |
 | Individual model artifact ≤ 250 MiB / total ≤ 1 GiB | no model artifacts ship; `rules/` is YAML + JSON |
 | Built for `linux/amd64` | yes — `--platform linux/amd64` |
-| Read-only root filesystem, only `/tmp` writable | verified in-container (25-PDF smoke test) |
+| Read-only root filesystem, only `/tmp` writable | verified in-container (25-PDF run) |
 | No LLMs, VLMs, or cloud OCR at runtime | verified — no network, model, or API imports anywhere in `mib/` |
-| One row per input PDF, no missing cases | 1,000/1,000 and 5,000/5,000 |
+| One row per input PDF, no missing cases | 1,000/1,000 and 5,000/5,000 natively; 25/25 in-container |
 | Passes `scripts/validate_submission.py` | yes, with `--require-complete` |
-| Deterministic | two independent full runs are byte-identical |
+| Deterministic | two independent full **native** runs are byte-identical |
+| In-container output equals native output | **not verified — see below** |
+
+### What the container run does and does not establish
+
+The 25-PDF container run establishes that the image builds from the submitted
+commit, starts, honours `--network none` and a read-only root, reads only the
+mounted input, and writes a schema-valid row for every input PDF.
+
+It does **not** establish output equivalence with the native run, and on the
+development host it demonstrably diverges. That host is arm64, the image is
+`linux/amd64`, so the container executes under emulation at **23 s/PDF against
+0.815 s/PDF native — roughly 28× slower**. At that speed the pool's 300 s
+stall backstop fires and converts pending packets into fallback rows (blank
+fields, `NEEDS_REVIEW`, confidence 0.05). 17 of the 25 rows came back that way.
+
+This is an artifact of emulation rather than a defect in the pipeline: on native
+`linux/amd64` the same backstop would require roughly 368 consecutive PDFs of
+zero worker progress before firing. It is disclosed because the degradation is
+*silent* — the run exits 0 and every row is schema-valid, so a row count alone
+does not distinguish a healthy run from a stalled one. Anyone reproducing this
+on Apple Silicon should expect the same and should compare row contents, not
+just row counts.
 
 ### Runtime — measured natively, not in-container
 
-Stated separately because it was **not** measured under the submitted image:
-the full 5,000-case validation run took **4,082 s wall (≈0.82 s/PDF)** executing
-the package directly on the host (4 cores), and 0.68 s/PDF on the training set.
-That is a strong signal against the 6 s/PDF average and the 30,000 s cap, but
-the only container-verified run is the 25-PDF offline smoke test. Treat the
-native figure as indicative, not as a container benchmark on the graders'
-hardware.
+Stated separately because it was **not** measured under the submitted image, and
+because the emulated container timing above is not meaningful for grading: the
+full 5,000-case validation run took **4,076 s wall (≈0.815 s/PDF)** executing the
+package directly on the host (4 cores), and 0.68 s/PDF on the training set.
+Against the 6 s/PDF average and the 30,000 s cap that is roughly 7× headroom.
+Treat the native figure as indicative, not as a container benchmark on the
+graders' hardware.
 
 ## Result on the public training set
 
