@@ -1,13 +1,13 @@
 # MIB Doc Challenge — technical memo
 
 **Score on the public training split (challenge `scripts/evaluate.py`):**
-`116.88 / 150` — extraction `40.76/50`, classification `60.72/80`, calibration
-`15.40/20`, 0 missing cases, 6 catastrophic false approvals against 431 true
-denials. Runtime 0.84 s/PDF on 4 vCPU against a 6 s/PDF budget; image 0.23 GiB.
+`120.29 / 150` — extraction `42.55/50`, classification `62.01/80`, calibration
+`15.73/20`, 0 missing cases, 8 catastrophic false approvals against 431 true
+denials. Runtime 1.00 s/PDF on 4 vCPU against a 6 s/PDF budget; image 0.32 GiB.
 
-No LLM, no network, no API keys. PyMuPDF for the text layer, OpenCV + Tesseract
-for scans, a hand-written policy engine, and one 26-weight logistic model for
-confidence, fitted on the public training labels.
+No LLM, no network, no API keys. PyMuPDF for the text layer, PP-OCRv4 via ONNX
+Runtime for scans, a hand-written policy engine, and one 27-weight logistic
+model for confidence, fitted on the public training labels.
 
 ## What the data actually is
 
@@ -34,22 +34,43 @@ never reaches the field parser; it is only recorded as a calibration feature.
 Large red overlays (`SAMPLE DENIAL`) are classified as watermarks and stripped
 before the note parser looks for a verdict, per the field manual's trap list.
 
-**Scans, line at a time.** Whole-page OCR on these documents produces garbage —
-the ink covers a small fraction of a noisy page, so the layout analyser locks
-onto gridlines. Instead I decode the embedded JPEG at native resolution (never
-re-render — that resamples an already-lossy image), keep only glyph-sized
-connected components, dilate horizontally into words, discard isolated marks,
-group words into lines, deskew each line independently, and OCR one line at a
-time at `--psm 7`. Crucially the OCR input is *grayscale inside a dilated glyph
-footprint*, not a binary mask: the footprint removes gridlines while the retained
-antialiasing is worth several characters per line.
+**Scans: the recognition engine turned out to be the whole game.** I built the
+scan path around Tesseract first, and it needed a lot of scaffolding to work at
+all: decode the embedded JPEG at native resolution (never re-render — that
+resamples an already-lossy image), keep only glyph-sized connected components,
+dilate into words, group into lines, deskew each line, then OCR one line at a
+time at `--psm 7` on *grayscale inside a dilated glyph footprint* rather than a
+binary mask. Whole-page Tesseract produces pure garbage on these documents,
+because the ink covers a small fraction of a noisy page and the layout analyser
+locks onto the scan gridlines. Orientation needed its own OCR-based vote across
+four rotations, because every geometric score I tried was actively wrong — the
+gridlines segment into convincing-looking "text lines" at any angle.
 
-Orientation is decided by how much real form vocabulary each of the four
-rotations yields. I first tried a cheap geometric score (are lines wide and
-horizontal?) and it was actively wrong — the scanned gridlines segment into
-convincing-looking text lines at any angle, and it flipped pages that had read
-correctly. The upright reading short-circuits, so only doubtful pages pay for
-the alternatives.
+All of that scaffolding produced 40.7/50 extraction, and it was still misreading
+`Wolf-1061c` as `Woll-1081c` and `2026-03-15` as `2028-03-16`.
+
+Swapping the engine for PP-OCRv4 (`rapidocr-onnxruntime`, 16 MB of ONNX carried
+inside the wheel) replaced the segmentation, grouping and orientation machinery
+with a text detector that simply finds the boxes, and moved the score by more
+than every other change I made combined:
+
+| | Tesseract + scaffolding | PP-OCRv4 |
+| --- | ---: | ---: |
+| Extraction | 40.69 | **42.55** |
+| Classification | 60.68 | **62.01** |
+| Adjudication accuracy | 69.8% | **72.1%** |
+| Total | 116.71 | **120.29** |
+
+The per-field gains land exactly where the old pipeline was weakest —
+`sponsor_id` 65.8 → 78.7%, `arrival_date` 78.9 → 87.9%, `visa_class` 80.4 →
+85.7% — and it is no slower end to end (1.00 s/PDF against 0.96), because
+detection replaces the per-line calls and the orientation sweep. The Tesseract
+path is still in the tree behind `MIB_OCR_ENGINE` so the comparison is
+reproducible.
+
+The one integration wrinkle: PP-OCR returns a detected box as a single token, so
+`Visa Class: MED-3` comes back as `VisaClass:MED-3`. OCR lines are re-spaced on
+the colon and on lower-to-upper transitions before label matching.
 
 **Parsing both layouts.** Native pages are two-column, so a single visual row
 holds the value *and* its label, in either order and sometimes with placeholder
@@ -145,10 +166,14 @@ in-sample 0.114 is optimistic.
   (121 packets, fully native, complete fields) splits 64 approved to 29 denied,
   where approving nets 396 raw points against 410 for reviewing. Those points
   need evidence, not a threshold.
-- **Sponsor IDs are the weakest field.** They are 4 random digits with no
-  vocabulary to snap to, and some are deliberately smudged. Digit-confusion
-  repair helps but cannot verify, and unlike the vocabulary fields there is no
-  defensible guess to fall back on — 253 are still blank.
+- **Eight false approvals, five of them one cause.** The packet's fee receipt was
+  unreadable, so the fee defaulted to `paid` when the truth was `unpaid`.
+  Requiring a *read* receipt before approving cuts them to four — but costs 2.4
+  classification points, so I did not take it. Eight against 431 true denials is
+  a tail, not a pattern.
+- **Sponsor IDs remain the weakest recovered field** at 78.7%. They are 4 random
+  digits with no vocabulary to snap to, and some are deliberately smudged, so
+  unlike the vocabulary fields there is no defensible guess to fall back on.
 - **Applicant-name precision looks like a bug and isn't worth fixing.** 152 names
   are wrong, half confidently snapped to real-but-incorrect lexicon entries.
   Tightening the threshold would genuinely reduce that, but it converts *wrong*
@@ -166,11 +191,11 @@ in-sample 0.114 is optimistic.
 
 ## What I would do with another week
 
-1. **Template-registered field OCR.** The forms have fixed layouts. Registering a
-   detected page against a template and OCR'ing fixed field boxes — instead of
-   discovering lines — would recover fields on pages too degraded to segment.
-   I now think this is the only remaining lever of real size, having ruled out
-   the cheaper version (better page classification bought nothing).
+1. **A recogniser fine-tuned on these fonts.** The engine swap showed how much
+   was left on the table in recognition alone; the generator uses a handful of
+   fonts at known sizes, so fine-tuning the PP-OCR recogniser on synthetic
+   renders of them should beat the general model, and would fit the artifact
+   limits easily. I would try this before anything else.
 2. **Train a small character classifier on the rendered fonts.** The generator
    uses a handful of fonts at known sizes; a few-hundred-KB CNN over segmented
    glyphs would likely beat Tesseract on this specific degradation, and fits the
