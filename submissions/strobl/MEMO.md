@@ -112,7 +112,7 @@ No validation labels were available or used.
 The public solution commit that introduced the candidate is
 `cb996c8edc0b17b7f23454fd2a86d498c11cfc3f`; subsequent commits only repair the
 GitHub test environment. The implementation is reviewed in
-<https://github.com/strobl/mib-doc-solution/pull/3>.
+<https://github.com/strobl/mib-doc-solution/pull/4>.
 
 ## Known failure modes
 
