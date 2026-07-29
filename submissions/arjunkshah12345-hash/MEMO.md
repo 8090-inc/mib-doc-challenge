@@ -15,14 +15,16 @@ fee-waiver + EV hedges the private leaders already enforce.
 
 | | Total / 150 | CFA | Notes |
 |--|------------:|----:|------|
-| **This submission (v42.5)** | **135.23+** (demote-pass; DIP-1 waived restored) | **0** | best extract + tyler gates without DIP over-demote |
+| **This submission (v42.5)** | **135.29** | **0** | extract 46.41 · class 71.61 · cal 17.27 (demote-pass on v40 fields) |
 | Prior ship (v41) | 138.086 | 0 | Overfit LC+trap cells — private #5 |
 | Prior ship (v38) | 135.56 | 0 | Earlier transfer-safe baseline |
 | Rival public claims (approx.) | 130–135 | 0 | Winning private with lower train |
 
-Validation entry: **5,000 / 5,000** predictions from this repository’s offline
-runtime (regenerated with v42); official `validate_submission` must report
-0 missing case IDs.
+Validation entry: **5,000 / 5,000** predictions. Built by applying the v42.5
+emitted-policy / LC-undo pass to the prior v41 validation field extractions
+(adjudication transfer gates); official `validate_submission` reports
+0 missing case IDs. Full end-to-end OCR regen of validation remains optional
+backup (same gates in runtime).
 
 We optimize for **private leaderboard integrity** under a hard **CFA = 0**
 constraint: zero catastrophic false approvals, identity-free rules, no
@@ -71,7 +73,7 @@ train peaks from MED/XW-1 LC + trap cells do not transfer. Section reality:
 
 | Team | Train | Honest signal | Extract | Class | Cal |
 |------|------:|--------------:|--------:|------:|----:|
-| **us v42.5** | ~135.2 | CFA=0 portable | **46.4** | ~71.6 | ~17.3 |
+| **us v42.5** | **135.29** | CFA=0 portable | **46.41** | 71.61 | 17.27 |
 | tylergibbs1 | 134.5 (OOF~119) | OOF+≤5 CFA budget | 43.8 | 72.8 | 17.9 |
 | zubalr | 133.9 (**OOF 128.5**) | best OOF total | 44.2 | 72.7 | 17.1 |
 | thegoleffect | 132.4 | hi-res risk OCR | 45.8 | 69.8 | 16.8 |
