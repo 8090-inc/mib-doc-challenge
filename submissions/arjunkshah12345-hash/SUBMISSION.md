@@ -4,18 +4,17 @@
 - Public solution repository: https://github.com/arjunkshah12345-hash/mib-doc-solution
 - Mandatory Dockerfile: https://github.com/arjunkshah12345-hash/mib-doc-solution/blob/main/Dockerfile
 
-Ship build **v42.1** (transfer-first): portable fee-waiver / emitted-policy /
-EV hedges aligned with private leaders. Solution tip:
-https://github.com/arjunkshah12345-hash/mib-doc-solution/commit/44b5f53
+Ship build **v42.2** (transfer-first): DIP-WAIVER no longer justifies waived
+fees on non-DIP visas (hardship only). Solution tip:
+https://github.com/arjunkshah12345-hash/mib-doc-solution/commit/4418505b23c0f6934077ee61eed1f9b5a6f9bb42
 
-Prior v41 public-train peak **138.086 / 150 CFA=0** overfit LC+trap cells and
-ranked behind lower-train rivals on unofficial private #3. v42.1 trades that
-inflation for private generalization (CFA=0 target).
+Prior v41 public-train peak **138.086 / 150 CFA=0** overfit LC+trap cells.
+v42.x trades that inflation for private generalization (CFA=0 target).
 
 Validation predictions in this PR: **5,000 / 5,000** records, official
 validator clean (0 missing case IDs). Predictions SHA-256:
 
-`570afb5766887052ba977fe47c3fdc27598d6a7ba73747b2cb5b0225f53ca05c`
+`419d78d100101c02409dd9a396bb56e666bc4ab85aec9c6b994b2b94a220698b`
 
 The solution repository contains the complete offline runtime, hashed
 `requirements.lock`, and pinned recalibration artifacts. This challenge entry
