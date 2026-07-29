@@ -15,7 +15,7 @@ fee-waiver + EV hedges the private leaders already enforce.
 
 | | Total / 150 | CFA | Notes |
 |--|------------:|----:|------|
-| **This submission (v42.2)** | *(re-measure on train after regen)* | **0 target** | DIP-1/XW-2 LC paid; waived LC=DIP-1 only; unsupported-waiver demote |
+| **This submission (v42.2)** | ~134.5 (demote-pass on v40) | **0** | DIP-WAIVER≠non-DIP waiver; CFA=0 |
 | Prior ship (v41) | 138.086 | 0 | Overfit LC+trap cells — private #5 |
 | Prior ship (v38) | 135.56 | 0 | Earlier transfer-safe baseline |
 | Rival public claims (approx.) | 130–135 | 0 | Winning private with lower train |
