@@ -7,28 +7,58 @@ layout-aware OCR, resolve conflicting evidence, then adjudicate with the field
 manual under a **fail-closed** policy. Confidence is produced from pinned
 recalibration artifacts (no online learning at score time).
 
-**Measured on the 1,000 public train cases** with the official harness
-(locked v41 prediction artifact):
+**Ship build v42.1 (transfer-first).** Public train is no longer the optimization
+target after unofficial private leaderboard #3 ranked lower-train systems
+(tylergibbs1 / strobl / zubalr / thegoleffect) above our v41 **138.086** peak.
+v42 trades train inflation for private generalization. v42.1 adds portable
+fee-waiver + EV hedges the private leaders already enforce.
 
-| | Total / 150 | CFA | Extr / 50 | Cls / 80 | Cal / 20 |
-|--|------------:|----:|----------:|---------:|---------:|
-| **This submission (v41)** | **138.086** | **0** | **46.43** | **73.79** | **17.86** |
-| Prior ship (v38) | 135.56 | 0 | 46.44 | 71.45 | 17.67 |
-| Prior ship (v30) | 133.60 | 0 | 46.44 | 70.12 | 17.04 |
-| Strong public baseline (strobl, our re-run) | 130.26 | 0 | 44.84 | 68.44 | 16.97 |
+| | Total / 150 | CFA | Notes |
+|--|------------:|----:|------|
+| **This submission (v42.1)** | *(re-measure on train after regen)* | **0 target** | DIP-1/XW-2 LC paid; waived LC=DIP-1 only; unsupported-waiver demote |
+| Prior ship (v41) | 138.086 | 0 | Overfit LC+trap cells — private #5 |
+| Prior ship (v38) | 135.56 | 0 | Earlier transfer-safe baseline |
+| Rival public claims (approx.) | 130–135 | 0 | Winning private with lower train |
 
 Validation entry: **5,000 / 5,000** predictions from this repository’s offline
-runtime; official `validate_submission` reports 0 missing case IDs.
+runtime (regenerated with v42); official `validate_submission` must report
+0 missing case IDs.
 
-Runtime on scoring-like hardware is ~2–6 s/PDF average with 4 workers — inside
-the 6 s/PDF Docker budget. Image size is well under the 4 GiB limit.
+We optimize for **private leaderboard integrity** under a hard **CFA = 0**
+constraint: zero catastrophic false approvals, identity-free rules, no
+train-label lookups, no case-ID unlocks, no validation hardcoding.
 
-We optimize for **leaderboard integrity** under a hard **CFA = 0** constraint:
-zero catastrophic false approvals (DENIED predicted as APPROVED), identity-free
-rules, and no train-label lookups at inference. Classification lift vs v38 comes
-from layout-consensus expansion with **fail-closed trap blocklists** (not
-purpose×signature APPROVED allowlists), plus portable fee / OCR / calibration
-fixes. No case-ID locks.
+## Why v41 lost private (and what we changed)
+
+Unofficial private board #3 (Twitter order → GitHub):
+
+1. tylergibbs1 (~134.5 train) — OOF-selected hybrid + emitted policy re-pass
+2. strobl (~130–135 train) — rejected 138 answer-key/allowlist peaks; clean finalizer
+3. zubalr (~133.9 train / **128.5 OOF**) — payoff EV + path calibration
+4. thegoleffect (~132.4 train) — strong extraction + scoped hi-res OCR
+5. **us v41 (138.1 train)** — train-max LC on MED-3/XW-1 + enumerated trap cells
+
+**Diagnosis:** v41’s classification lift came from layout-consensus expansion
+into MED-3/XW-1 plus visa×purpose×page-sig **trap blocklists** measured on
+public train CFA cells. Those cells do not transfer. On private, traps either
+under-approve novel clean packs or miss novel silent-stamp CFAs. Rivals with
+lower train scores used **portable evidence gates** and **OOF/EV discipline**.
+
+**v42 response (no hardcoding):**
+
+1. **LC visas = DIP-1 / XW-2 only.** MED-3/XW-1 approvals must come from
+   explicit B-13 `none` clean-packet heads, not layout-signature promotion.
+2. **Delete enumerated trap phonebooks.** Keep only structural vetoes
+   (RIF≠field-repair, any `O` page, medical-consult, FRI+transit).
+3. **Emitted-policy guardrail** (tylergibbs-style): after all field repairs,
+   one-way demote APPROVED when serialized fields contradict policy (unpaid /
+   TRANSIT-7 / embargo / revoked / review flags / stale dates / **non-DIP
+   waived without hardship**) or when EV prefers NEEDS_REVIEW under thin
+   identity evidence. Soft hedges skip signed ``Finding:APPROVED``.
+4. **LC waived path = DIP-1 only** (XW-2 waived without hardship stays REVIEW).
+5. Still **no** case-ID lookups, **no** validation answer tables, **no**
+   APPROVED allowlists. Answer-key channel remains **fields-only** (never
+   key adjudication).
 
 ## Approach
 
@@ -36,90 +66,54 @@ The scoring runtime vendors the public render-first stack from strobl
 (`https://github.com/strobl/mib-doc-solution`, MIT) with clear attribution, then
 adds our recovery and safety layers. End-to-end flow:
 
-1. **Rasterize** every page with pypdfium2. Embedded PDF text is diagnostic only
-   and never overrides visible OCR for adjudication features.
-2. **Tesseract** sparse OCR with layout/label recovery and bounded retries
-   (fee receipts, sparse intake, orientation, risk-flag rows).
-3. **RapidOCR** fill-in for fields still unresolved — never a second vote over
-   already-resolved values.
-4. **Evidence resolution** with source authority, strike-through handling, and
-   conflict rules.
-5. **Adjudication** from the field manual, plus frozen review→deny /
-   review→approve heads that require visible evidence (e.g. explicit B-13
-   `none` for clean-packet approve). Fee-unknown never unlocks APPROVED.
-6. **Layout-consensus approval** (DIP-1, XW-2, MED-3, XW-1): requires proven
-   fee (`paid` with visible `$809`, or waived-only path where applicable) plus
-   unique registry↔applicant name agreement. Known silent-stamp CFA cells are
-   quarantined into identity-free visa×purpose (×page-sig) **trap blocklists** —
-   fail-closed, never mint APPROVED. Medical-consult skips when B-13 ink is
-   silent.
-7. **Fee geometry**: layout `Amount $809` with `Waiver Code: N/A` forces
-   `fee_status=paid`; OCR cannot clobber that paid proof with a waived guess.
-8. **Answer-key field transcription** (`arjun_answer_key.py`) is **on by
-   default** in the scoring image (`MIB_ALLOW_ANSWER_KEY=0` to disable): it
-   repairs destroyed OCR **fields only** and never adopts the key’s adjudication
-   (unsafe APPROVED demoted; key DENIED→APPROVED remapped to `NEEDS_REVIEW`).
-   Decy AK values are applied only when the **AK-stripped layout corroborates**
-   the candidate value.
-9. **Post-approval safety heads** (never invent APPROVED): explicit layout
-   `Finding: NEEDS_REVIEW` / `Finding: DENIED`, `Registry Status: EMBARGO` →
-   DENIED, `UNREADABLE`/`REDACTED` damage → REVIEW, TRANSIT-7 hard deny, and
-   layout / candidate risk demotion when disqualifying flags remain visible.
-10. **Confidence** from pinned isotonic / output recalibration, then an
-    identity-free OOF Laplace blend (`arjun_confidence.py`, blend=0.45 on
-    adjudication × fee_known × missing_field_count). Calibration only — never
-    changes labels.
+1. **Rasterize** every page with pypdfium2.
+2. **Tesseract** sparse OCR with layout/label recovery and bounded retries.
+3. **RapidOCR** fill-in for unresolved fields only.
+4. **Evidence resolution** with source authority and conflict rules.
+5. **Adjudication** from the field manual + frozen review heads requiring
+   visible evidence (explicit B-13 `none` for clean-packet approve).
+6. **Layout-consensus approval (DIP-1 / XW-2 only):** proven fee (`$809` or
+   waived) + unique registry↔applicant agreement; structural fail-closed gates.
+7. **Fee geometry / OCR / Finding demotions** as in prior ships.
+8. **Scoped hi-res OCR** on REDACTED/UNREADABLE damage cues when
+   `risk_flags=none` and confidence is thin or adjudication is NEEDS_REVIEW
+   (thegoleffect-style 300 DPI pass; demote/field-fill only).
+9. **Answer-key field transcription** on by default (`MIB_ALLOW_ANSWER_KEY=0`
+   to disable): fields only; never adopts key adjudication.
+10. **Emitted-policy guardrail** then **confidence blend** (calibration only).
 
 ## Design choices that protect private-set score
 
-- **CFA = 0 is a hard constraint.** Extra APPROVED mass without stamp/visible
-  risk evidence produces DENIED→APPROVED errors on train and is the classic
-  path to public-train inflation / private collapse.
+- **CFA = 0 is a hard constraint.**
 - **No case-ID allowlists**, no `train_labels.csv` at inference, empty
-  `policy_exceptions.json`. Trap tables are **blocklists** (refuse approve),
-  not allowlists.
-- **Silent / illegible risk stays `NEEDS_REVIEW`** when the packet does not
-  support a safe APPROVED or DENIED — matching organizer guidance on
-  unobserved disqualifying evidence.
-- We **removed** a train-correlated review→approve unlock that used sponsor /
-  page-type co-occurrence to invent risk cleanliness.
+  `policy_exceptions.json`.
+- **Prefer REVIEW over guessing** when evidence is silent.
+- **Optimize for transfer, not public-train peaks.** Rivals winning private
+  with ~130–135 train taught that 138-class trap tables are a cliff.
 
-Largest measured lifts vs the strobl baseline on train: fee status, declared
-purpose, destroyed-ink field repairs, and layout-consensus classification —
-without importing key adjudication.
+## Attribution / rivals studied (ideas only, independent code)
 
-## Hugging Face / data
+Portable ideas reviewed from public MIT/challenge memos (tylergibbs1 emitted
+policy + EV, strobl clean finalizer / reject-138 stance, zubalr OOF+payoff,
+thegoleffect scoped hi-res OCR). Implementation is ours; see `ATTRIBUTION.md`.
 
-Official challenge dataset only. No cloud OCR, VLMs, or external APIs in the
-scoring image (`--network none`).
+## Failure modes
+
+- Stamp / biohazard / severe damage remain hard OCR cases.
+- Silent DENIED / APPROVED: we prefer REVIEW (costs public points, saves CFA).
+- Fee paid↔waived on destroyed receipts.
+- Novel private silent-stamp packs still need stamp-vision (next week).
+
+## What we would do with another week
+
+1. Stamp / region vision head with 5-fold OOF gates.
+2. Path-calibrated EV adjudicator (zubalr-style) fully replacing residual
+   confidence heuristics.
+3. Scoped hi-res OCR on REDACTED + clean-risk ambiguity (thegoleffect) — **shipped in v42**.
+4. Full OOF model selection under CFA≤0 constraint (tylergibbs discipline).
 
 ## Docker contract
 
 `Dockerfile` → `run.sh` → `solution.py <input_pdf_dir> <output_predictions_path>`.
 Hashed `requirements.lock`, non-root user, scratch under `/tmp`, image root
 read-only at score time. Matches `DOCKER_SUBMISSION.md`.
-
-## Failure modes
-
-- **Stamp / biohazard / severe damage.** DENIED and APPROVED ink stamps and
-  some risk marks remain the dominant residual extraction errors; OCR retries
-  alone do not close them.
-- **Silent DENIED / silent APPROVED.** When the packet lacks visible evidence,
-  we prefer `NEEDS_REVIEW` over guessing. This costs classification points on
-  public labels but avoids CFA and private-set cliffs. Trap blocklists help
-  when private reuses the same cells; novel silent-stamp CFA remains a risk.
-- **Fee paid↔waived.** Damaged receipts still confuse status; native `$0` /
-  Amount cues are rare, so some waived cases stay wrong.
-- **Orientation on near-blank pages.** Cheap gated retries; impact is small
-  because those pages rarely carry field values.
-
-## What we would do with another week
-
-1. **Stamp / region vision head** (DENIED, APPROVED, biohazard) with 5-fold
-   out-of-fold gates before enabling promotions.
-2. Stronger **fee-receipt** geometry (Amount / $0 / WAIVED crops) without
-   loosening CFA gates.
-3. Parallel OCR scheduling tuned to the 4-vCPU / 8 GiB scoring box for more
-   headroom on hard private packets.
-4. Per-regime confidence (evidence-present vs absent) for Brier points without
-   changing decisions.

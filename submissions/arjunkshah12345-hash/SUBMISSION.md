@@ -4,14 +4,18 @@
 - Public solution repository: https://github.com/arjunkshah12345-hash/mib-doc-solution
 - Mandatory Dockerfile: https://github.com/arjunkshah12345-hash/mib-doc-solution/blob/main/Dockerfile
 
-Ship build **v41**: locked public-train score **138.086 / 150**,
-**CFA = 0** (extraction 46.43, classification 73.79, calibration 17.86).
-Approach, failure modes, and next-week plan are in `MEMO.md`.
+Ship build **v42.1** (transfer-first): portable fee-waiver / emitted-policy /
+EV hedges aligned with private leaders. Solution tip:
+https://github.com/arjunkshah12345-hash/mib-doc-solution/commit/44b5f53
+
+Prior v41 public-train peak **138.086 / 150 CFA=0** overfit LC+trap cells and
+ranked behind lower-train rivals on unofficial private #3. v42.1 trades that
+inflation for private generalization (CFA=0 target).
 
 Validation predictions in this PR: **5,000 / 5,000** records, official
 validator clean (0 missing case IDs). Predictions SHA-256:
 
-`ab5e5ea15df059dff2d39447e889637720227051d9fa3e181103229f07fa3d51`
+`570afb5766887052ba977fe47c3fdc27598d6a7ba73747b2cb5b0225f53ca05c`
 
 The solution repository contains the complete offline runtime, hashed
 `requirements.lock`, and pinned recalibration artifacts. This challenge entry
