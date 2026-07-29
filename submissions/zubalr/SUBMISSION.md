@@ -2,8 +2,9 @@
 
 **Solution repository:** https://github.com/zubalr/mib-intake
 
-The repository contains a Docker-based, fully offline solution. Its entrypoint
-accepts an input PDF directory and an output JSONL path:
+The repository is public and includes a `Dockerfile` at its root. The solution
+is fully offline, and its entrypoint accepts an input PDF directory and an
+output JSONL path:
 
 ```bash
 docker build -t mib-intake .

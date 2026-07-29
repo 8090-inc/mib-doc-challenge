@@ -2,47 +2,35 @@
 
 ## Result
 
-Two figures are reported, because they answer different questions.
-
-| Measurement | Total |
-| --- | ---: |
-| Full public training set, final Docker image | 133.93 / 150 |
-| Repeated out-of-fold estimate, 10 fold assignments | **128.53 / 150, SE 0.16** |
-
-| Section | Out of fold | Training set |
+| Section | Training set | Out of fold |
 | --- | ---: | ---: |
-| Extraction | 44.15 / 50 | 44.16 / 50 |
-| Classification | 67.88 / 80 | 72.69 / 80 |
-| Calibration | 16.50 / 20 | 17.07 / 20 |
-| Mean confidence Brier | 0.0874 | 0.0732 |
+| Extraction | 44.16 / 50 | 44.15 / 50 |
+| Classification | 72.69 / 80 | 67.88 / 80 |
+| Calibration | 17.07 / 20 | 16.50 / 20 |
+| Total | **133.93 / 150** | **128.53 / 150, SE 0.16** |
+| Mean confidence Brier | 0.0732 | 0.0874 |
 
-The training-set figure is the shipped Docker image scored on all 1,000 labeled
-packets with the official evaluator. It is fully reproducible, and it is
-in-sample: the model was fitted on those rows.
+The training-set column is the shipped Docker image scored on all 1,000 labeled
+packets with the official evaluator. It is reproducible and in-sample: the model
+was fitted on those rows.
 
-The out-of-fold figure is the estimate to use for unseen packets. Every held-out
+The out-of-fold column is the estimate for unseen packets. Every held-out
 prediction comes from a model that did not train on that packet, averaged over
-ten independent fold assignments. The gap between the two figures is in-sample
-optimism, so the larger number should not be read as an expected score.
+ten fold assignments. The gap between the columns is in-sample optimism, so the
+larger total should not be read as an expected score. Extraction is nearly
+identical under both, as it does not depend on the model.
 
-Extraction is nearly identical under both, as expected: it does not depend on
-the model.
+## Scoring behaviour
 
-## Scoring behavior
+Three choices follow from reading the evaluator rather than the prose. Every
+packet must produce a record, because a missing one forfeits its extraction and
+classification denominator; failures therefore emit a schema-valid fallback.
+Blank fields score no better than wrong ones, so unresolved fields take
+conservative defaults that are held separate from policy evidence, and a guessed
+field can never justify an approval.
 
-The evaluator informed three implementation choices.
-
-First, every input packet must produce a record. A missing record forfeits its
-extraction and classification denominator, so processing failures return a
-schema-valid fallback instead of dropping the case.
-
-Second, blank fields have no scoring advantage over incorrect fields.
-Unresolved fields therefore receive conservative printable defaults. Those
-defaults are kept separate from policy evidence, so a guessed field cannot
-justify an approval.
-
-Third, adjudication uses the published payoff matrix directly. For class
-probabilities `a`, `d`, and `r`, the expected raw scores are:
+Adjudication maximises expected value against the published payoff matrix. For
+class probabilities `a`, `d`, `r`:
 
 ```text
 APPROVED:      8a - 4d + r
@@ -50,8 +38,9 @@ DENIED:        8d + r
 NEEDS_REVIEW:  2a + 2d + 8r
 ```
 
-The selected action is the expected-value maximum. Reported confidence is the
-probability assigned to that action.
+The asymmetric penalty on a false approval makes NEEDS_REVIEW the correct hedge
+more often than intuition suggests. Reported confidence is the probability of
+the chosen action.
 
 ## Evidence extraction
 
@@ -72,18 +61,16 @@ unmatched instead of being forced onto a known token.
 
 ## Adversarial content
 
-Hidden content is classified from PDF structure rather than keywords alone.
-The parser checks text rendering mode, opacity, foreground and background
-colors, and position relative to the visible crop.
+Hidden content is classified from PDF structure rather than keywords: text
+rendering mode, opacity, foreground and background colours, and position
+relative to the visible crop.
 
-The pipeline also distinguishes visible evidence from visible instructions.
-Barcode payloads and prompt-like directives do not become field evidence or
-policy commands. Their presence may be recorded as a document-quality feature,
-but their contents are quarantined.
-
-This separation is preserved during OCR. Rendering a page does not make hidden
-white or transparent text visible, and visible instructional payloads remain
-excluded by source and content rules.
+The pipeline also separates visible evidence from visible instructions. Barcode
+payloads and prompt-like directives never become field evidence or policy
+commands; their presence is recorded as a document-quality signal and their
+contents are quarantined. The separation survives OCR, since rendering a page
+does not make hidden text visible and instructional payloads remain excluded by
+source rules.
 
 ## Adjudication
 
@@ -97,49 +84,93 @@ classifier. Its inputs describe extracted evidence, coverage, page structure,
 OCR quality, document damage, temporal margins, and the deterministic path
 prior. It does not receive a case ID, filename, or hidden answer content.
 
-The fitted classifier is blended with the deterministic path distribution.
-This retains the stability of the policy prior while allowing the model to
-separate cases that share a coarse path. If the model artifact cannot be
-loaded, the deterministic policy remains a functional fallback.
+The classifier is blended with the deterministic path distribution, retaining
+the policy prior's stability while letting the model separate cases that share a
+coarse path. If the artifact cannot be loaded, the deterministic policy remains
+a working fallback.
 
-Training excludes cases settled by an explicit adjudicator note because those
-cases never reach model inference. Model selection uses the challenge
-classification and calibration objective on held-out predictions.
+Training excludes cases settled by an adjudicator note, since those never reach
+model inference. Both the estimator and the blend weight are selected on the
+challenge's own objective over held-out predictions, using a
+one-standard-error rule.
 
 ## Generalization checks
 
-The validation corpus contains 5,000 unlabeled packets. Schema validation
-confirmed one output per input with no missing cases.
+The validation corpus is unlabeled, so behaviour was compared across corpora
+rather than scored. Schema validation confirms one output per input with no
+missing cases.
 
-Closed-vocabulary coverage remained stable between the labeled and unlabeled
-corpora for species, home world, visa class, declared purpose, fee status, and
-risk flags. Applicant-name combinations changed substantially, while component
-token coverage remained stable. This supports token-level matching without
-assuming that complete names repeat.
+The closed vocabularies produced **zero new values** on the unseen corpus, which
+is the assumption vocabulary snapping rests on. Applicant names behaved as
+expected, with many unseen full names but stable component tokens, which is why
+names are matched token-wise. Fallback rates moved under half a percentage point
+on every field and mean confidence by 0.005; the adjudication mix shifts toward
+DENIED, consistent with the validation set carrying more damaged packets.
 
-Confidence and fallback distributions were also compared between corpora.
-The unlabeled set contains more damaged packets, which increases conservative
-fallbacks without changing the evidence hierarchy.
+## Failure modes
 
-## Limitations
+**Unreadable risk panels dominate the residual error.** `risk_flags` is wrong on
+211 of 1,000 training packets, and 173 of those are cases where the panel could
+not be read at all and the pipeline emitted nothing. It is the highest-leverage
+field in the corpus: weight 8 in extraction, and an input to the decision path,
+so a miss costs roughly five times its face value.
 
-Some packet fields are absent, contradictory, or unreadable. The pipeline
-reports defaults for schema completeness but does not promote those defaults to
-evidence. This is especially important for risk flags and fee status, where
-absence of a readable page is not evidence of a clean record.
+That loss is not recoverable from the packets. The most commonly missed flag,
+`illegible_biometrics` (103 cases), is also the most plausibly derivable, since
+it ought to follow from failing to read the biometrics. It does not: conditioning
+on an unreadable biometric confidence gives 22.5% incidence against a 22.3% base
+rate, so the failure to read carries no information about whether the flag is
+set. Absence of a readable page is not evidence of a clean record, and the
+pipeline does not treat it as one.
 
-The learned adjudicator is intentionally small and regularized. It improves
-probability estimates within unresolved policy paths, but it cannot recover
-evidence that is not present in the packet.
+**Sentinel collisions are a recurring hazard.** `fee_status` had a value,
+`unknown`, that was also the internal marker for "no trusted evidence". The two
+were indistinguishable downstream, so a receipt that plainly stated `unknown`
+was overwritten with a guess. Separating them was worth about a point. Other
+fields use the same sentinel convention and have not been audited as closely.
+
+**Adjudicator notes on badly degraded scans.** A signed note settles a case
+outright and is correct on all 355 packets where one is read. Roughly thirty
+further pages are probably notes but survive no combination of rotation, crop,
+contrast or deskew tried; those packets fall through to the model.
+
+**The model handles the genuinely ambiguous remainder.** 645 packets reach it
+and it is 75.8% accurate on them. Its confidences are already better than a
+constant predictor, so the residual there is bounded by evidence rather than by
+calibration.
+
+## What another week would buy
+
+**Targeted recovery of note pages.** The largest identified pool of readable but
+unread evidence. A page-template classifier used as a *trigger* for region-level
+OCR, rather than as a verdict source, is the approach I would pursue; a
+whole-page classifier reached high recall in prototyping but is not something I
+would let decide an adjudication.
+
+**A systematic audit for sentinel collisions.** The `fee_status` case was found
+by accident and was one of the larger single gains in the project. The same
+pattern plausibly exists in other fields, and the audit is cheap relative to its
+payoff.
+
+**Risk-panel image recovery.** By far the highest-value target, worth several
+points if solved, and the reason the current ceiling sits where it does. It
+needs image-level work on damaged scans rather than better parsing, which is why
+it was not attempted inside the available time.
+
+**Calibration conditioned on more than the decision path.** Confidence currently
+keys on which policy path fired. Extraction quality and damage signals are
+available and unused there.
 
 ## Reproducibility
 
-The runtime is fully offline and uses pinned dependencies. The Docker image
-contains PyMuPDF, Tesseract, NumPy, and scikit-learn. No LLM, VLM, cloud OCR
-service, network request, or API key is used.
+The runtime is fully offline with pinned dependencies: PyMuPDF, Tesseract, NumPy
+and scikit-learn. No LLM, VLM, cloud OCR service, network request, or API key is
+used. The 5,000 validation packets ran in 2h55m on 4 vCPU, 2.11s per PDF against
+a 6s budget.
 
-`tools/check_env.py` verifies that the training and runtime scikit-learn
-versions match. `tools/verify_image.py` verifies that the built image contains
-the current source and policy artifacts. The test suite covers visibility
-classification, OCR parsing, vocabulary matching, schema validation, and
-end-to-end output generation.
+`tools/check_env.py` asserts that the training and runtime scikit-learn versions
+match, since a cross-version model unpickles with a warning rather than an error
+and still produces plausible output. `tools/verify_image.py` confirms the built
+image contains the current source and policy artifacts. The test suite covers
+visibility classification, OCR parsing, vocabulary matching, schema validation,
+and end-to-end output generation.
