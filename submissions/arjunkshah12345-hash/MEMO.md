@@ -7,15 +7,15 @@ layout-aware OCR, resolve conflicting evidence, then adjudicate with the field
 manual under a **fail-closed** policy. Confidence is produced from pinned
 recalibration artifacts (no online learning at score time).
 
-**Ship build v42.4 (transfer-first).** Public train is no longer the optimization
+**Ship build v42.5 (transfer-first).** Public train is no longer the optimization
 target after unofficial private leaderboard #3 ranked lower-train systems
 (tylergibbs1 / strobl / zubalr / thegoleffect) above our v41 **138.086** peak.
-v42 trades train inflation for private generalization. v42.4 adds portable
+v42 trades train inflation for private generalization. v42.5 adds portable
 fee-waiver + EV hedges the private leaders already enforce.
 
 | | Total / 150 | CFA | Notes |
 |--|------------:|----:|------|
-| **This submission (v42.4)** | **134.71** (demote-pass on v40) | **0** | Finding stamp wins; portable demote otherwise |
+| **This submission (v42.5)** | **135.23+** (demote-pass; DIP-1 waived restored) | **0** | best extract + tyler gates without DIP over-demote |
 | Prior ship (v41) | 138.086 | 0 | Overfit LC+trap cells — private #5 |
 | Prior ship (v38) | 135.56 | 0 | Earlier transfer-safe baseline |
 | Rival public claims (approx.) | 130–135 | 0 | Winning private with lower train |
@@ -62,6 +62,25 @@ lower train scores used **portable evidence gates** and **OOF/EV discipline**.
 6. Still **no** case-ID lookups, **no** validation answer tables, **no**
    APPROVED allowlists. Answer-key channel remains **fields-only** (never
    key adjudication).
+
+
+## Competitive position (why private #1 is winnable)
+
+Unofficial private #3 ranked lower *train* scores above our v41 138 because
+train peaks from MED/XW-1 LC + trap cells do not transfer. Section reality:
+
+| Team | Train | Honest signal | Extract | Class | Cal |
+|------|------:|--------------:|--------:|------:|----:|
+| **us v42.5** | ~135.2 | CFA=0 portable | **46.4** | ~71.6 | ~17.3 |
+| tylergibbs1 | 134.5 (OOF~119) | OOF+≤5 CFA budget | 43.8 | 72.8 | 17.9 |
+| zubalr | 133.9 (**OOF 128.5**) | best OOF total | 44.2 | 72.7 | 17.1 |
+| thegoleffect | 132.4 | hi-res risk OCR | 45.8 | 69.8 | 16.8 |
+| us v41 | **138.1** | overfit | 46.4 | 73.8 | 17.9 |
+
+We already lead **extraction**. Private risk is classification transfer + the
+weight-8 `risk_flags` miss (mostly image-only — same bottleneck zubalr/gole
+report). v42.5 keeps portable CFA gates but restores true DIP-1 waived
+approvals we wrongly demoted.
 
 ## Approach
 
