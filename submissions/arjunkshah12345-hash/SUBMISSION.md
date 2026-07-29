@@ -6,8 +6,8 @@
 
 Ship build **v42.5** (transfer-first / private-win): best-in-field extraction
 plus tyler-parity emitted policy (Finding stamp wins; non-DIP hardship-only
-waived; DIP-1 waived restored). Solution tip will match `main` at push time —
-see latest commit on https://github.com/arjunkshah12345-hash/mib-doc-solution
+waived; DIP-1 waived restored). Solution tip:
+https://github.com/arjunkshah12345-hash/mib-doc-solution/commit/9a51b7172fe26ce85af9565d5daceffdd82b0b58
 
 Demote-pass train (official evaluator on public labels):
 
