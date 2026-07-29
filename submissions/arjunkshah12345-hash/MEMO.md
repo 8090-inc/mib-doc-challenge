@@ -7,15 +7,15 @@ layout-aware OCR, resolve conflicting evidence, then adjudicate with the field
 manual under a **fail-closed** policy. Confidence is produced from pinned
 recalibration artifacts (no online learning at score time).
 
-**Ship build v42.3 (transfer-first).** Public train is no longer the optimization
+**Ship build v42.4 (transfer-first).** Public train is no longer the optimization
 target after unofficial private leaderboard #3 ranked lower-train systems
 (tylergibbs1 / strobl / zubalr / thegoleffect) above our v41 **138.086** peak.
-v42 trades train inflation for private generalization. v42.3 adds portable
+v42 trades train inflation for private generalization. v42.4 adds portable
 fee-waiver + EV hedges the private leaders already enforce.
 
 | | Total / 150 | CFA | Notes |
 |--|------------:|----:|------|
-| **This submission (v42.3)** | ~133.8 (demote-pass on v40) | **0** | full emitted policy = tyler private gates |
+| **This submission (v42.4)** | **134.71** (demote-pass on v40) | **0** | Finding stamp wins; portable demote otherwise |
 | Prior ship (v41) | 138.086 | 0 | Overfit LC+trap cells — private #5 |
 | Prior ship (v38) | 135.56 | 0 | Earlier transfer-safe baseline |
 | Rival public claims (approx.) | 130–135 | 0 | Winning private with lower train |
@@ -50,7 +50,9 @@ lower train scores used **portable evidence gates** and **OOF/EV discipline**.
    explicit B-13 `none` clean-packet heads, not layout-signature promotion.
 2. **Delete enumerated trap phonebooks.** Keep only structural vetoes
    (RIF≠field-repair, any `O` page, medical-consult, FRI+transit).
-3. **Emitted-policy guardrail** (tylergibbs-style): after all field repairs,
+3. **Emitted-policy guardrail** (tylergibbs-style; ``Finding:APPROVED`` wins
+   and is never overwritten by late field demotions; ``Finding:DENIED`` /
+   ``NEEDS_REVIEW`` still force demote): after all field repairs,
    one-way demote APPROVED when serialized fields contradict policy (unpaid /
    TRANSIT-7 / embargo / revoked / review flags / stale dates / **non-DIP waived without hardship** (DIP-WAIVER text does not
    justify XW/MED waived fees)) or when EV prefers NEEDS_REVIEW under thin

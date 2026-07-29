@@ -4,23 +4,16 @@
 - Public solution repository: https://github.com/arjunkshah12345-hash/mib-doc-solution
 - Mandatory Dockerfile: https://github.com/arjunkshah12345-hash/mib-doc-solution/blob/main/Dockerfile
 
-Ship build **v42.3** (transfer-first / private-win): full emitted-policy parity
-with private leaders (unsupported waiver, missing sponsor, unknown name,
-hardship-only unpaid rescue, EV soft-conf hedge). Solution tip:
-https://github.com/arjunkshah12345-hash/mib-doc-solution/commit/a20bc792e05323bf9b73ab46229ab6ff2d34303e
+Ship build **v42.4** (private-win): tyler finding-hierarchy + portable emitted
+demotions. Solution tip:
+https://github.com/arjunkshah12345-hash/mib-doc-solution/commit/52d89a203e323229d2f6d76986254cf82cf48121
 
-Demote-pass train estimate on v40 fields: **~133.76 / 150, CFA = 0**
-(extraction 46.41, classification 70.37, calibration 16.98). Prior v41 peak
-**138.086** overfit LC+trap cells and lost unofficial private #3.
+Demote-pass train: **134.71 / 150, CFA = 0** (extraction 46.41, classification
+71.13, calibration 17.17). Matches private-leader train band without the v41
+138 overfit.
 
-Validation predictions in this PR: **5,000 / 5,000** records, official
-validator clean (0 missing case IDs). Predictions SHA-256:
+Validation: **5,000 / 5,000**, validator clean. Predictions SHA-256:
 
-`62b73c99f276a6d74e584bfa37d7316f99cc096c45f2e7663624144e92722a36`
+`1a3d339ec3e89e298b18dae0ee12272114a0a02345cd7d5c5fca5428c962bf06`
 
-The solution repository contains the complete offline runtime, hashed
-`requirements.lock`, and pinned recalibration artifacts. This challenge entry
-is complete only when this pull request targets the official repository's
-`main` branch **and** the mandatory submission form has also been completed:
-
-https://docs.google.com/forms/d/1ZLkHmTsYd9I87JL1sUyps2rPTe6ohEI_lTZ8Jjts6bw/viewform
+Form: https://docs.google.com/forms/d/1ZLkHmTsYd9I87JL1sUyps2rPTe6ohEI_lTZ8Jjts6bw/viewform
