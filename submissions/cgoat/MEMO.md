@@ -317,14 +317,30 @@ in-sample 0.114 is optimistic.
    self-updates per batch (`batch_revoked_sponsors`), but the embargo world and
    the frequency-outlier threshold itself are still fitted on all 1,000 training
    packets with no held-out estimate of how much they generalise.
-5. **A trained classifier under the expected-value framework.** I tested a plain
-   per-path frequency lookup (fit each policy branch's outcome distribution,
-   decide by expected value under the payoff matrix) against the shipped rules,
-   honestly with 5-fold cross-validation, and it lost even after tuning Dirichlet
-   shrinkage (62.98 vs 63.66 classification points) — sparse paths need more than
-   a raw frequency table. A classifier trained on document-evidence features and
-   blended with the path prior is the likely next real gain over a flat lookup;
-   it wasn't attempted here for lack of time.
+5. **A trained classifier under the expected-value framework — tested, not shipped.**
+   I tested a plain per-path frequency lookup (fit each policy branch's outcome
+   distribution, decide by expected value under the payoff matrix) against the
+   shipped rules, honestly with 5-fold cross-validation, and it lost even after
+   tuning Dirichlet shrinkage (62.98 vs 63.66 classification points) — sparse
+   paths need more than a raw frequency table. I then trained a real
+   `HistGradientBoostingClassifier` on ~30 document-evidence features
+   (evidence coverage, cross-source agreement, flags, categorical fields,
+   staleness margin) restricted to the 444 packets my rules don't resolve
+   deterministically, and it *did* beat the rule default honestly under 5-fold
+   CV (+1.53/80 classification points). But breaking the gain down by decision
+   branch showed it was entirely produced by, and risked entirely on, the
+   `risk_panel_unread` bucket — packets where the risk-flag evidence was never
+   legible in the first place. There the model gambles on proxy correlations
+   from 207 training examples, and catastrophic false approvals in that bucket
+   alone rose from 6 to 29 (elsewhere the classifier was flat to slightly
+   negative). That reverses the one deliberate conservative rule in this policy
+   (approving requires having actually *read* flag evidence — see above), on
+   exactly the branch where the training sample is smallest and the truth is
+   least informed by anything I can extract. I did not ship this: the honest
+   evaluation shows it works on this training split, but the risk profile it
+   trades into is the wrong shape for evidence that's structurally missing
+   rather than merely unresolved, and the gain does not survive outside that
+   one bucket.
 
 ## Reproducing
 
