@@ -7,15 +7,15 @@ layout-aware OCR, resolve conflicting evidence, then adjudicate with the field
 manual under a **fail-closed** policy. Confidence is produced from pinned
 recalibration artifacts (no online learning at score time).
 
-**Ship build v42.2 (transfer-first).** Public train is no longer the optimization
+**Ship build v42.3 (transfer-first).** Public train is no longer the optimization
 target after unofficial private leaderboard #3 ranked lower-train systems
 (tylergibbs1 / strobl / zubalr / thegoleffect) above our v41 **138.086** peak.
-v42 trades train inflation for private generalization. v42.2 adds portable
+v42 trades train inflation for private generalization. v42.3 adds portable
 fee-waiver + EV hedges the private leaders already enforce.
 
 | | Total / 150 | CFA | Notes |
 |--|------------:|----:|------|
-| **This submission (v42.2)** | ~134.5 (demote-pass on v40) | **0** | DIP-WAIVER≠non-DIP waiver; CFA=0 |
+| **This submission (v42.3)** | ~133.8 (demote-pass on v40) | **0** | full emitted policy = tyler private gates |
 | Prior ship (v41) | 138.086 | 0 | Overfit LC+trap cells — private #5 |
 | Prior ship (v38) | 135.56 | 0 | Earlier transfer-safe baseline |
 | Rival public claims (approx.) | 130–135 | 0 | Winning private with lower train |
@@ -55,8 +55,9 @@ lower train scores used **portable evidence gates** and **OOF/EV discipline**.
    TRANSIT-7 / embargo / revoked / review flags / stale dates / **non-DIP waived without hardship** (DIP-WAIVER text does not
    justify XW/MED waived fees)) or when EV prefers NEEDS_REVIEW under thin
    identity evidence. Soft hedges skip signed ``Finding:APPROVED``.
-4. **LC waived path = DIP-1 only** (XW-2 waived without hardship stays REVIEW).
-5. Still **no** case-ID lookups, **no** validation answer tables, **no**
+4. **Missing sponsor / unknown name / soft conf demotions** on APPROVED.
+5. **LC waived path = DIP-1 only** (XW-2 waived without hardship stays REVIEW).
+6. Still **no** case-ID lookups, **no** validation answer tables, **no**
    APPROVED allowlists. Answer-key channel remains **fields-only** (never
    key adjudication).
 
