@@ -1,9 +1,9 @@
 # MIB Doc Challenge — technical memo
 
 **Score on the public training split (challenge `scripts/evaluate.py`):**
-`121.60 / 150` — extraction `42.55/50`, classification `63.00/80`, calibration
-`16.05/20`, 0 missing cases, 8 catastrophic false approvals against 431 true
-denials. Runtime 0.55 s/PDF on 4 vCPU against a 6 s/PDF budget; image 0.32 GiB.
+`122.34 / 150` — extraction `42.55/50`, classification `63.66/80`, calibration
+`16.12/20`, 0 missing cases, 6 catastrophic false approvals against 431 true
+denials. Runtime 0.63 s/PDF on 4 vCPU against a 6 s/PDF budget; image 0.32 GiB.
 
 No LLM, no network, no API keys. PyMuPDF for the text layer, PP-OCRv4 via ONNX
 Runtime for scans, a hand-written policy engine, and one 27-weight logistic
@@ -147,6 +147,23 @@ own adjudicator notes, which cite their reasons in plain text. That surfaced two
 revoked sponsors beyond the manual's list (`SPN-2718`, `SPN-9090`) and the
 embargoed home world `Wolf-1061c`.
 
+**Revoked sponsors, generalised past the ones I happened to read.** The manual
+says other revoked sponsors appear in the examples without naming them, and a
+fixed list only ever catches ones already seen by hand. A revoked sponsor is
+denied every time it shows up, so it recurs far more than an ordinary sponsor:
+on the training batch the 99th-percentile sponsor id appears twice, while
+every sponsor I'd found by reading notes appears 9-32 times. `batch_revoked_sponsors`
+now flags any sponsor id appearing more than 4x that 99th-percentile baseline,
+recomputed fresh per input directory rather than hardcoded, with a 400-sponsor
+minimum corpus size so a small run falls back to the public list instead of
+treating sampling noise as a signal. This surfaced `SPN-7331` — 15 occurrences,
+12 of them truth `DENIED` — which I'd missed by hand. Worth +0.66 classification
+points on the training cache and drops catastrophic false approvals from 8 to 6,
+measured through the real `adjudicate()` (so note-precedence cases like
+MIB-000194 aren't miscredited). The mechanism is more valuable than the one id
+it found here: it should also catch whichever revoked sponsors show up in the
+validation and private test sets without needing another manual note-reading pass.
+
 Checking each condition against the labels shows the policy is close to
 deterministic: disqualifying flag → denied (186/186), `TRANSIT-7` → denied
 (53/53), unpaid fee → denied (50/50, including diplomatic packets — the manual's
@@ -254,26 +271,60 @@ in-sample 0.114 is optimistic.
    | fee_status | 64.7% | **70.8%** |
 
    The ceiling is data volume: ~500-900 crops per field is roughly 50 examples
-   per class, against a recogniser pretrained on millions of images. This does
-   not prove the idea is unworkable — genuine fine-tuning from the PP-OCR weights,
-   or synthetic renders in the four fonts the generator uses (Helvetica,
-   Helvetica-Bold, Times-Roman, Helvetica-Oblique) to lift the volume, could
-   still clear the bar. But it does mean the cheap version of the idea is dead,
-   and I would want that volume problem solved before spending more on it.
+   per class, against a recogniser pretrained on millions of images.
 
-2. **Train a small character classifier on the rendered fonts.** The generator
-   uses a handful of fonts at known sizes; a few-hundred-KB CNN over segmented
-   glyphs would likely beat Tesseract on this specific degradation, and fits the
-   250 MiB artefact limit comfortably.
-3. **Multi-hypothesis OCR with vocabulary-constrained decoding.** Keep Tesseract's
+   **I then tried the follow-up this pointed at, and it also lost.** Genuine
+   CTC fine-tuning from the PP-OCRv4 pretrained weights (not from scratch),
+   on 80,000 synthetic line crops rendered in the generator's four fonts
+   (Helvetica, Helvetica-Bold, Times-Roman, Helvetica-Oblique) plus 3,839 real
+   crops harvested the same label-free way as the classifier attempt, using
+   real train-packet pages this time so the transcription is exact rather than
+   guessed. Training itself worked — 91.0% exact-match accuracy on a held-out
+   slice of that data after 12 epochs on a GPU — but measured end to end on
+   150 packets held out of *both* the crop harvest and training, against the
+   same off-the-shelf pretrained model:
+
+   | Field | Fine-tuned | PP-OCR (shipped) |
+   | --- | ---: | ---: |
+   | declared_purpose | 81.2% | **84.6%** |
+   | sponsor_id | 78.5% | **81.2%** |
+   | home_world | 88.6% | **90.6%** |
+   | risk_flags | 73.2% | **74.5%** |
+   | species_code | 94.6% | **95.3%** |
+   | **Extraction points** | 42.09 | **42.57** |
+
+   It lost on 7 of 9 fields net -0.48 points, despite 91% accuracy on its own
+   validation split. The 91% figure was measured on data drawn 95% from my own
+   synthetic renderer, so it mostly says the model learned my degradation
+   pipeline, not the real one — degrading the model's general-purpose
+   robustness in exchange for specializing on a reconstruction that doesn't
+   quite match the actual generator. This is exactly the risk I flagged before
+   starting ("I would be training against my reconstruction... not the real
+   one") and built the 150-packet holdout specifically to catch; it caught it.
+   I did not ship this model. Rebuilding it with the real-to-synthetic ratio
+   inverted (thousands more genuine crops, a smaller synthetic share used only
+   to fill vocabulary gaps) is the one variant of this idea I haven't
+   falsified, but at that point the honest framing is "collect more real
+   labelled data," not "fine-tune the model."
+
+2. **Multi-hypothesis OCR with vocabulary-constrained decoding.** Keep PP-OCR's
    top-N per line and score candidates against the closed vocabularies, rather
    than snapping a single noisy string after the fact.
-4. **Per-field confidence, not just per-decision.** Extraction is scored per
+3. **Per-field confidence, not just per-decision.** Extraction is scored per
    field; knowing which fields are shaky would let me choose between emitting a
    low-confidence reading and leaving it blank.
-5. **Cross-validate the policy constants.** The revoked-sponsor and embargo lists
-   are currently fitted on all 1,000 training packets with no held-out estimate
-   of how much they generalise.
+4. **Cross-validate the policy constants.** The revoked-sponsor list now
+   self-updates per batch (`batch_revoked_sponsors`), but the embargo world and
+   the frequency-outlier threshold itself are still fitted on all 1,000 training
+   packets with no held-out estimate of how much they generalise.
+5. **A trained classifier under the expected-value framework.** I tested a plain
+   per-path frequency lookup (fit each policy branch's outcome distribution,
+   decide by expected value under the payoff matrix) against the shipped rules,
+   honestly with 5-fold cross-validation, and it lost even after tuning Dirichlet
+   shrinkage (62.98 vs 63.66 classification points) — sparse paths need more than
+   a raw frequency table. A classifier trained on document-evidence features and
+   blended with the path prior is the likely next real gain over a flat lookup;
+   it wasn't attempted here for lack of time.
 
 ## Reproducing
 
