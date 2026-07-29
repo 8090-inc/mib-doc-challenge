@@ -6,24 +6,27 @@ Two figures are reported, because they answer different questions.
 
 | Measurement | Total |
 | --- | ---: |
-| Out-of-fold estimate, 10 fold assignments | **128.53 ± 0.16 / 150** |
 | Full public training set, final Docker image | 133.93 / 150 |
+| Repeated out-of-fold estimate, 10 fold assignments | **128.53 / 150, SE 0.16** |
 
-| Section | Out of fold |
-| --- | ---: |
-| Extraction | 44.15 / 50 |
-| Classification | 67.88 / 80 |
-| Calibration | 16.50 / 20 |
-| Mean confidence Brier | 0.0874 |
+| Section | Out of fold | Training set |
+| --- | ---: | ---: |
+| Extraction | 44.15 / 50 | 44.16 / 50 |
+| Classification | 67.88 / 80 | 72.69 / 80 |
+| Calibration | 16.50 / 20 | 17.07 / 20 |
+| Mean confidence Brier | 0.0874 | 0.0732 |
 
-The out-of-fold figure is the one to use for expected performance on unseen
-packets: every held-out prediction comes from a model that did not train on that
-packet, averaged over ten independent fold assignments.
+The training-set figure is the shipped Docker image scored on all 1,000 labeled
+packets with the official evaluator. It is fully reproducible, and it is
+in-sample: the model was fitted on those rows.
 
-The training-set figure is the same pipeline scored on the data the model was
-fitted on. It is reproducible and is reported for completeness, but it is not a
-generalization estimate — the gap between the two is ordinary in-sample
-optimism, and the larger number should not be read as the expected score.
+The out-of-fold figure is the estimate to use for unseen packets. Every held-out
+prediction comes from a model that did not train on that packet, averaged over
+ten independent fold assignments. The gap between the two figures is in-sample
+optimism, so the larger number should not be read as an expected score.
+
+Extraction is nearly identical under both, as expected: it does not depend on
+the model.
 
 ## Scoring behavior
 
