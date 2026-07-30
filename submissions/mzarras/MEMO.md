@@ -22,7 +22,7 @@ label-truth 140/140 on the 800-case tune split (162/162 corpus-wide); transit/fe
 fire. The **EV layer** adjudicates the 286-case residual, and an isotonic curve calibrates
 confidence after the policy. Runtime is fully offline and LLM-free (rules, two OCR engines, an
 8 KB logistic artifact); LLM tooling was used at dev time for analysis per challenge rules. Runs
-are byte-identical and average ~1.4 s/PDF against the 6 s budget.
+are byte-identical and average ~1.5–1.6 s/PDF against the 6 s budget.
 
 ## Decision theory
 
@@ -47,7 +47,7 @@ optimum (τ=0.366) buys ~2 more points at ~21 catastrophic false approvals and w
 ## Silent denials and the structural CFA defense
 
 The organizers ruled (issues #4/#5) that some DENIED labels have zero recoverable in-packet
-evidence; NEEDS_REVIEW is the correct output there. We measured this directly: the *cleanest*
+evidence; NEEDS_REVIEW is the correct output there. I measured this directly: the *cleanest*
 evidence bucket — zero scan pages, all core fields natively read, registry CLEAR, fee paid — is
 89 tune cases with truth 61 A / 10 D / 18 NR. Roughly 10% of every clean-looking shape is
 contaminated, and every contaminated case carries a truth flag with no textual trace in the PDF.
@@ -57,7 +57,7 @@ without blocking the approvals that share their feature vector byte-for-byte.
 
 The holdout gate confirmed this is the binding failure mode. Run **once** as a final gate, the
 probability-guard configuration scored **119.76 with 5 CFAs** in 200 cases — all five consistent
-with the silent-denial pattern. In response we implemented a structural guard: approvals
+with the silent-denial pattern. In response I implemented a structural guard: approvals
 additionally require *positively-read clean evidence* — a decoded `Observed flags: none` B-13
 line or an approving note — precisely the document silent-denial packets structurally lack. To be
 exact about what the holdout influenced: the design principle ("never approve on absence of
@@ -84,7 +84,7 @@ and the holdout counts favor blocking.
 
 127.02 is in-sample-flattered: the shipped EV artifact is refit on all 800 tune cases, and while
 the refit shows +327 classification raw, the leakage-free OOF estimate of the same layer is +167
-(~2.1 points less). We forecast ~120–125 on unseen labeled data — and then measured it: a
+(~2.1 points less). I forecast ~120–125 on unseen labeled data — and then measured it: a
 second, final holdout run on the shipped configuration (disclosed as the holdout's second and
 last use; nothing was changed afterward) scored **121.97 with 2 CFAs**, inside the forecast band,
 with the structural guard converting the first run's 5 CFAs into 2 — both residuals consistent
@@ -130,7 +130,7 @@ Learned constants, disclosed with their generalization basis:
 | Closed value vocabularies incl. arrival year ∈ {2025, 2026} (948/52, zero others) | value-level priors, not case-keyed | constrain OCR snapping; an out-of-range year is provably a digit misread ('6'→'8') |
 | Staleness cutoff = PDF `creationDate` − 180d | no receipt date printed on any page; metadata proxy measures 28/28 | fixed 2026-06-29 fallback if metadata is absent |
 
-Negative results we measured and rejected: relaxing the B-13 requirement to "no flag evidence
+Negative results I measured and rejected: relaxing the B-13 requirement to "no flag evidence
 found" added 75 approvals and 18 CFAs; corroborated approval for B-13-absent packets bought 6
 CFAs; both unshipped. Remaining known weaknesses: 3 double-print/ghosted B-13 scans unreadable by
 both engines; the ~10% silent-denial contamination is irreducible by any in-packet reader; and
