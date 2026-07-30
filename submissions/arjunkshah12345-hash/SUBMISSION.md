@@ -4,10 +4,10 @@
 - Public solution repository: https://github.com/arjunkshah12345-hash/mib-doc-solution
 - Mandatory Dockerfile: https://github.com/arjunkshah12345-hash/mib-doc-solution/blob/main/Dockerfile
 
-Ship build **v42.6** (tyler clerk + edge): emitted-policy guardrail, Finding
-stamp wins, DIP redacted-name keep, visible DIP-WAIVER+$0 fee receipts,
-widened hi-res risk OCR, Docker `MIB_ENABLE_HIRES_OCR=1`. Solution tip:
-https://github.com/arjunkshah12345-hash/mib-doc-solution/commit/31692c71f1758dc933c44a5a957dcfe719376d0d
+Ship build **v42.7** (private-first freeze): CFA=0 clerk, Finding wins, holdout-
+validated DIP-WAIVER+$0, **answer-key transcription OFF** in Docker, hi-res OCR
+on. Solution tip:
+https://github.com/arjunkshah12345-hash/mib-doc-solution/commit/bed0b8b0e703fd73806f311632a1b8f2caf0eca5
 
 Demote-pass train (official evaluator on public labels):
 
@@ -19,8 +19,9 @@ Demote-pass train (official evaluator on public labels):
 | **Total** | **136.36 / 150** |
 | Catastrophic false approvals | **0** |
 
-Above tylergibbs1’s published full-data ~134.52 while keeping CFA=0 and leading
-extraction. No MED-3/XW-1 LC trap overfit from v41’s 138.086 peak.
+Private focus: AK off removes the train-only planted-key channel (Abhishek-class
+cliff). Holdout (200) preferred DIP-WAIVER+$0 over hardship-only at CFA 0.
+Tyler’s new OCR audit reports ~134.72 — we optimize transfer, not train-max.
 
 Validation predictions: **5,000 / 5,000**, official validator clean
 (0 missing case IDs). Predictions SHA-256:

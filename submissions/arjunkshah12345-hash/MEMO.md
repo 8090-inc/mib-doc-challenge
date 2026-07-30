@@ -7,25 +7,25 @@ layout-aware OCR, resolve conflicting evidence, then adjudicate with the field
 manual under a **fail-closed** policy. Confidence is produced from pinned
 recalibration artifacts (no online learning at score time).
 
-**Ship build v42.6 (tyler clerk + extract edge).** Public train is no longer the
-optimization target after unofficial private leaderboard #3 ranked lower-train
-systems (tylergibbs1 / strobl / zubalr / thegoleffect) above our v41 **138.086**
-peak. v42 trades train inflation for private generalization. v42.6 keeps the
-emitted-policy guardrail and adds tyler-parity edges: DIP redacted-name keep,
-visible DIP-WAIVER+$0 fee-receipt justification, widened hi-res risk OCR gate,
-Docker ``MIB_ENABLE_HIRES_OCR=1``.
+**Ship build v42.7 (private-first freeze).** Goal is private transfer, not max
+public train. Holdout audit (200/800, seed 42) kept the visible DIP-WAIVER+$0
+waive edge (holdout class ↑, CFA 0 on both slices). Runtime now defaults
+**answer-key transcription OFF** (`MIB_ALLOW_ANSWER_KEY=0`) — planted AK is a
+train channel and a private cliff (Abhishek-class). Hi-res OCR stays on.
+Emitted-policy / Finding / CFA=0 clerk unchanged.
 
 | | Total / 150 | CFA | Notes |
 |--|------------:|----:|------|
-| **This submission (v42.6)** | **136.36** | **0** | extract 46.41 · class 72.51 · cal 17.45 (demote-pass on v40 fields) |
+| **This submission (v42.7)** | **136.36** | **0** | same demote-pass as v42.6; AK off at Docker runtime |
+| Holdout check (DIP-WAIVER+$0) | — | **0** | holdout class better than hardship-only |
 | Prior ship (v42.5) | 135.29 | 0 | Stricter non-DIP waiver demotes |
 | Prior ship (v41) | 138.086 | 0 | Overfit LC+trap cells — private #5 |
-| Prior ship (v38) | 135.56 | 0 | Earlier transfer-safe baseline |
-| Rival public claims (approx.) | 130–135 | 0 | Winning private with lower train |
+| tyler new OCR audit | ~134.72 | ? | Holdout-disciplined; extract ~45.5 |
+| Rival portable band | 130–135 | 0 | strobl / zubalr OOF / goleffect |
 
-Validation entry: **5,000 / 5,000** predictions. Built by applying the v42.6
-emitted-policy pass to the prior v41 validation field extractions; official
-`validate_submission` reports 0 missing case IDs.
+Validation entry: **5,000 / 5,000** predictions (v42.6/v42.7 demote-pass on
+v41 fields). Private scoring uses the Docker image with AK off + HIRES on.
+
 
 We optimize for **private leaderboard integrity** under a hard **CFA = 0**
 constraint: zero catastrophic false approvals, identity-free rules, no
