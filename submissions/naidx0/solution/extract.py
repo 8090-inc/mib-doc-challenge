@@ -945,7 +945,11 @@ def resolve_fields(pages, species_vocab, world_vocab):
     # species
     if "species_code" in cands:
         raw = _best_candidate("species_code", cands["species_code"])
-        out["species_code"] = vocab.canon_species(raw, species_vocab)
+        # a damage marker ("[SPECIES WHITEOUT]") is absence, not a value --
+        # canonizing it manufactured a fake enum and blocked the output-only
+        # modal fill downstream.
+        out["species_code"] = ("" if _is_damaged(raw)
+                               else vocab.canon_species(raw, species_vocab))
     # home world
     if "home_world" in cands:
         best_hw = _best_candidate_full("home_world", cands["home_world"])
