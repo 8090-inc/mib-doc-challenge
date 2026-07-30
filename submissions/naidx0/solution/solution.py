@@ -28,7 +28,14 @@ import extract
 import ingest
 import vocab
 
-PER_PDF_TIMEOUT = 25.0
+# Worst-case per-PDF wall clock before a worker is killed and the packet
+# falls back to a schema-valid review record.  The heaviest packets are
+# exactly the ones the second-engine OCR fallback exists for (every
+# tesseract variant fails first, then RapidOCR runs per page), and 25s was
+# killing them mid-recovery -- 22 of the 1000 training packets regressed to
+# fallback rows.  Throughput is ~2s/PDF on 4 workers against a 6s/PDF
+# budget, so a 55s worst-case cap costs nothing overall.
+PER_PDF_TIMEOUT = 55.0
 OUTPUT_FIELDS = [
     "case_id", "applicant_name", "species_code", "home_world", "visa_class",
     "sponsor_id", "arrival_date", "declared_purpose", "risk_flags",
