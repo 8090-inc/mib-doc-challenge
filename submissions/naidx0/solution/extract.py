@@ -724,7 +724,13 @@ def collect_candidates(pages, species_vocab=frozenset(), world_vocab=frozenset()
            "has_b13_page": False, "has_registry_page": False,
            "has_i8090_page": False,
            "flags_candidate_present": False, "flags_source_ocr": False,
-           "positive_clean_flags": False, "registry_clear": False}
+           "positive_clean_flags": False, "registry_clear": False,
+           # forensic signals: presence-only facts about content the trust
+           # layer dropped, plus stamp text and the printed biometric
+           # confidence.  Hidden content itself is never propagated.
+           "injection_seen": False, "n_untrusted": 0,
+           "stamp_denied": False, "stamp_approved": False,
+           "biometric_conf": -1.0}
     aux["n_pages"] = len(pages)
     for page in pages:
         ft = page.get("form_type", "UNKNOWN")
@@ -742,6 +748,17 @@ def collect_candidates(pages, species_vocab=frozenset(), world_vocab=frozenset()
             aux["has_i8090_page"] = True
         if page.get("from_ocr"):
             aux["n_ocr_pages"] += 1
+        if page.get("injection"):
+            aux["injection_seen"] = True
+        aux["n_untrusted"] += int(page.get("n_untrusted") or 0)
+        for big in page.get("big_spans") or []:
+            bl = re.sub(r"[^a-z]", "", str(big).lower())
+            if "sample" in bl:
+                continue          # the SAMPLE DENIAL watermark is a trap
+            if "denied" in bl or "denial" in bl:
+                aux["stamp_denied"] = True
+            elif "approved" in bl:
+                aux["stamp_approved"] = True
         # C2b: a biometric slip is present but its observed-flags line could not
         # be read at all -> we cannot rule out a disqualifier -> force review.
         if ft == "B13" and page.get("illegible"):
@@ -823,7 +840,14 @@ def collect_candidates(pages, species_vocab=frozenset(), world_vocab=frozenset()
                 # always wins.
                 aux.setdefault("fee_amounts", []).append(value)
                 continue
-            if k in ("biometric_conf", "case_id"):
+            if k == "biometric_conf":
+                m = re.search(r"(\d{1,3})", str(value))
+                if m:
+                    v = float(m.group(1))
+                    if 0 <= v <= 100:
+                        aux["biometric_conf"] = max(aux["biometric_conf"], v)
+                continue
+            if k == "case_id":
                 continue
             _add_candidate(cands, k, value, ft, from_ocr)
     return cands, aux

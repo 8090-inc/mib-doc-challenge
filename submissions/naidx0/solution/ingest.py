@@ -208,7 +208,14 @@ def _detect_form_type(text_join, ocr_join=""):
     return "UNKNOWN"
 
 
-def _trusted_text_spans(page, w, h):
+def _trusted_text_spans(page, w, h, forensics=None):
+    """Trusted spans, plus (optionally) FORENSIC SIGNALS about what was
+    dropped: the count of untrusted spans and whether any matched an
+    injection signature.  The dropped CONTENT is never returned or used --
+    only the fact of its presence, which is itself evidence (packets carrying
+    an injection are disproportionately denials in the labeled corpus).
+    Large-font trusted text (stamps) is collected separately."""
+    from trust import _normalize_for_match, INJECTION_PATTERNS
     spans = []
     for block in page.get_text("dict")["blocks"]:
         if "lines" not in block:
@@ -221,8 +228,15 @@ def _trusted_text_spans(page, w, h):
                 rgb = color_to_rgb(s.get("color", 0))
                 bbox = s["bbox"]
                 if not span_is_trusted(text, rgb, bbox, w, h):
+                    if forensics is not None:
+                        forensics["n_untrusted"] = forensics.get("n_untrusted", 0) + 1
+                        norm = _normalize_for_match(text)
+                        if any(pat.search(norm) for pat in INJECTION_PATTERNS):
+                            forensics["injection"] = True
                     continue
                 spans.append({"bbox": tuple(bbox), "text": text})
+                if forensics is not None and float(s.get("size", 0)) >= 16.0:
+                    forensics.setdefault("big_spans", []).append(text.strip())
     return spans
 
 
@@ -522,7 +536,8 @@ def ingest_pdf(path, do_ocr=True):
         w = h = 792.0
     for page in doc:
         pw, ph = page.rect.width, page.rect.height
-        spans = _trusted_text_spans(page, pw, ph)
+        forensics = {}
+        spans = _trusted_text_spans(page, pw, ph, forensics)
         text_join = "\n".join(s["text"] for s in spans)
         # recover case id from header
         m = re.search(r"MIB-(\d{6})", text_join)
@@ -552,6 +567,9 @@ def ingest_pdf(path, do_ocr=True):
             "form_type": ftype,
             "text_spans": spans,
             "ocr_lines": ocr_lines,
+            "n_untrusted": forensics.get("n_untrusted", 0),
+            "injection": bool(forensics.get("injection")),
+            "big_spans": forensics.get("big_spans", []),
             "from_ocr": needs_ocr,
             "illegible": illegible,
         })
