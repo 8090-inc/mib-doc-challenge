@@ -253,7 +253,10 @@ def _adjudicate_rules(fields, aux, cands, ref_date, use_embargo=False):
     # the labeled corpus so that confidence ~= P(our decision is correct).)
     finding = aux.get("note_finding")
     if finding == "DENIED":
-        return "DENIED", 0.96, "adjudicator_note"
+        # Laplace-smoothed accuracy of a recovered Finding: line on the
+        # labeled corpus (248/248 correct -> ~0.996); under-reporting it was
+        # leaving Brier on the table.
+        return "DENIED", 0.99, "adjudicator_note"
 
     # --- HARD DENIAL SIGNALS (C1) -------------------------------------------
     # A directly-observed disqualifying flag is checked BEFORE any
@@ -282,7 +285,7 @@ def _adjudicate_rules(fields, aux, cands, ref_date, use_embargo=False):
     # just as accurate empirically, and the documented trap is a "sample
     # denial" WATERMARK, not a signed Finding: line.
     if finding in ("APPROVED", "NEEDS_REVIEW"):
-        return finding, 0.95, "adjudicator_note"
+        return finding, 0.99, "adjudicator_note"
 
     # 2. Revoked sponsor.  Non-DIP-1 -> hard denial.  DIP-1 is sponsor-exempt
     # (verified: revoked + DIP-1 -> APPROVED) UNLESS a page that could hide a
