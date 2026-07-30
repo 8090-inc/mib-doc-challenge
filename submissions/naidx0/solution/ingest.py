@@ -422,7 +422,51 @@ def _ocr_image(pil_gray, page_rotation=0):
             txt, score, _ = _ocr_variants(rot)
             if score > best_score:
                 best_text, best_score = txt, score
+    # Second-engine fallback.  Tesseract and RapidOCR fail differently: on the
+    # mid-degraded scans where tesseract's character model produces soup
+    # ("Apizat Sed View 7"), the detector+recognizer pipeline still reads the
+    # printed values ("SpclasCod:LUNA_SECURID", "Vsa CcXW-1"), which the
+    # downstream fuzzy canonicalizers were built to repair.  Gated on
+    # tesseract having FAILED to read enough form labels, so clean scans pay
+    # nothing; the extra lines are appended, never substituted, and pass
+    # through the same trust scrub as every other OCR line.
+    if best_score < _GOOD_ENOUGH:
+        extra = _rapidocr_text(arr)
+        if extra:
+            best_text = (best_text + "\n" + extra) if best_text else extra
     return best_text
+
+
+_RAPID_ENGINE = None
+_RAPID_TRIED = False
+
+
+def _rapidocr_text(arr):
+    """Text lines from the RapidOCR ONNX engine, '' when unavailable.
+
+    The engine ships its models inside the wheel and runs fully offline on
+    CPU; it is initialised once per worker process with single-threaded ONNX
+    ops so the 4-worker parallelism stays the only parallelism.
+    """
+    global _RAPID_ENGINE, _RAPID_TRIED
+    if not _RAPID_TRIED:
+        _RAPID_TRIED = True
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            _RAPID_ENGINE = RapidOCR(intra_op_num_threads=1,
+                                     inter_op_num_threads=1)
+        except Exception:
+            _RAPID_ENGINE = None
+    if _RAPID_ENGINE is None:
+        return ""
+    try:
+        img = _preprocess_norm(arr)
+        rgb = np.stack([img] * 3, axis=-1)
+        res, _elapse = _RAPID_ENGINE(rgb)
+        lines = [str(r[1]) for r in (res or []) if r and len(r) > 1]
+        return "\n".join(lines)
+    except Exception:
+        return ""
 
 
 _LABEL_HINT_RE = re.compile(
