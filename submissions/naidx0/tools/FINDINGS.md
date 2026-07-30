@@ -203,3 +203,21 @@ some submissions report is accounted for by the planted answer-key values
 optimism that their own memos document (133.9 -> 128.5 out-of-fold; a 138.1
 train peak ranking behind four lower-train systems on the unofficial
 private board).
+
+- **The wall is confirmed from the other side.**  A full audit of the
+  strongest rival codebase (the one claiming classification 71.6-71.9)
+  found: its only NEEDS_REVIEW-to-APPROVED head is a fitted EV forest making
+  a population-prior bet on `insufficient_evidence` reviews, gated by
+  margins tuned on public train -- the same out-of-fold-fragile bet this
+  pipeline measured negative three times; its features cannot distinguish a
+  silent-disqualifier packet from a true approval any more than ours can;
+  its shipped configuration feeds no answer-key content into any decision
+  path; and its visual/pixel channels are all deny-direction or
+  extraction-only.  Their classification edge over a refuse-to-bet pipeline
+  is that bet, and nothing else.
+- **Forensic signals do not unlock the pool either.**  Injection presence,
+  untrusted-span counts, adjudicator stamps, and printed biometric
+  confidence are now captured (presence-only, content never used).  Stamps
+  agree 100% with decisions already made; injection presence shifts the
+  review pool's denial share (37% vs 16%) but leaves every sub-bucket mixed;
+  the silent-disqualifier denials carry no injections at all.
