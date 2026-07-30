@@ -169,3 +169,37 @@ remaining calibration gap is mostly irreducible noise, not mis-set numbers.
   cannot buy points by approving true denials unnoticed.
 - Measure on all 1000 cases, never a subset.  A 145-case edge-case sample once
   showed a clean run while the full set had 22 catastrophic false approvals.
+
+
+## Final-sprint ceiling audits (deadline week)
+
+- **risk_flags is at its text ceiling.**  Of the 199 remaining missed flag
+  instances, 157 do not appear in the packet text at all (any page, either
+  OCR engine) and 42 exist only as sub-70 fuzzy remnants -- the acceptance
+  band that a threshold sweep already measured as net-negative.  Zero missed
+  flags score >= 76 anywhere.  The matcher reads everything readable.
+- **The stuck-review pool is shape-inseparable.**  Every true-denial stuck in
+  the A-heavy review buckets (unverified_clean, fee_unverified,
+  med3_no_biometric, unsupported_waiver) has an evidence shape identical to
+  dozens of stuck true-approvals: same visa/fee reads, same page
+  composition, registry CLEAR, trusted sponsor -- the disqualifying flag was
+  simply never printed (biohazard_red with no biometric slip in the packet,
+  memory_tampering on nothing).  No zero-false-approval promotion gate
+  exists at n >= 5.  This is why the fitted EV layer failed out-of-fold
+  three times: there is nothing to fit.
+- **Always-on second-engine OCR adds nothing.**  Running RapidOCR on every
+  OCR page (not just tesseract failures) measured +0.0006 weighted on a
+  112-packet stratified sample with identical flag recall: the failure gate
+  already captures all of the second engine's value.
+- **Calibration is at its floor.**  A per-(rule, decision, confidence) Brier
+  audit puts the total remaining retune ceiling at +0.16; 96% of the
+  remaining Brier sum is irreducible p(1-p) outcome noise.  The one real
+  cell (fee_unknown, measured 0.765 vs emitted 0.56) was taken.
+
+Combined with the earlier sections, the honest public-training endpoint of
+this architecture on this corpus is ~125.8/150.  The gap to the 130+ numbers
+some submissions report is accounted for by the planted answer-key values
+(which this pipeline drops as untrusted by design) and by in-sample
+optimism that their own memos document (133.9 -> 128.5 out-of-fold; a 138.1
+train peak ranking behind four lower-train systems on the unofficial
+private board).

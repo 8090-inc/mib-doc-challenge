@@ -8,13 +8,13 @@ VLM, or network at runtime — two complementary OCR engines (Tesseract, with a 
 on pages Tesseract fails), classical image processing, and a rules engine whose policy was
 reverse-engineered from the public training labels and verified against the real documents.
 
-On the **full 1,000-case training set**, the official scorer reports **125.57 / 150**
-(classification 65.47 / 80, extraction 43.85 / 50, calibration 16.25 / 20, mean Brier 0.0937) with
+On the **full 1,000-case training set**, the official scorer reports **125.79 / 150**
+(classification 65.47 / 80, extraction 43.99 / 50, calibration 16.33 / 20, mean Brier 0.0918) with
 **2 catastrophic false approvals** at ~2.1 s wall per PDF on 4 vCPU, well inside the 6 s budget.
 Output is byte-identical across runs, passes the official `validate_submission.py`, and is locked by a
 regression suite covering the injection, forged-note, unreadable-page, and placeholder cases.
 
-The path there was 112.27 → 116.63 → 121.74 → 123.36 → 125.57, and the first number is the
+The path there was 112.27 → 116.63 → 121.74 → 123.36 → 125.79, and the first number is the
 instructive one.
 An early build measured 121 on a 145-PDF edge-case subset with zero catastrophic approvals; the full
 set then exposed **22 catastrophic false approvals**. The pipeline was treating "no risk flag read" as
