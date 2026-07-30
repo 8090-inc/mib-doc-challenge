@@ -47,9 +47,12 @@ python3 scripts/run_docker_submission.py \
 ## Runtime characteristics
 
 - Fully offline (`--network none`), CPU-only, deterministic (byte-identical across runs).
-- ~4.5 CPU-seconds per PDF on 4 vCPU — inside the 6 s/PDF budget.
-- Image ~1.1 GiB, well under the 4 GiB limit; no model artifacts beyond the Tesseract system package.
-- Scores 123.36 / 150 on the full 1,000-case public training set with 2 catastrophic false approvals.
+- ~2.1 s wall per PDF on 4 vCPU (~7.3 CPU-seconds) — well inside the 6 s/PDF budget;
+  worst-case per-PDF cap 55 s.
+- Image well under the 4 GiB limit. OCR models: the Tesseract system package plus the
+  RapidOCR ONNX models bundled inside its wheel (~32 MiB, loaded from the package, no downloads).
+- Scores 125.57 / 150 on the full 1,000-case public training set with 2 catastrophic false approvals
+  (official evaluator; classification 65.47, extraction 43.85, calibration 16.25, mean Brier 0.0937).
 
 ## Notes on `predictions.jsonl`
 
