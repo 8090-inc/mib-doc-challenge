@@ -4,29 +4,28 @@
 - Public solution repository: https://github.com/arjunkshah12345-hash/mib-doc-solution
 - Mandatory Dockerfile: https://github.com/arjunkshah12345-hash/mib-doc-solution/blob/main/Dockerfile
 
-Ship build **v42.5** (transfer-first / private-win): best-in-field extraction
-plus tyler-parity emitted policy (Finding stamp wins; non-DIP hardship-only
-waived; DIP-1 waived restored). Solution tip:
-https://github.com/arjunkshah12345-hash/mib-doc-solution/commit/9a51b7172fe26ce85af9565d5daceffdd82b0b58
+Ship build **v42.6** (tyler clerk + edge): emitted-policy guardrail, Finding
+stamp wins, DIP redacted-name keep, visible DIP-WAIVER+$0 fee receipts,
+widened hi-res risk OCR, Docker `MIB_ENABLE_HIRES_OCR=1`. Solution tip:
+https://github.com/arjunkshah12345-hash/mib-doc-solution/commit/31692c71f1758dc933c44a5a957dcfe719376d0d
 
 Demote-pass train (official evaluator on public labels):
 
 | Section | Score |
 |---------|------:|
 | Extraction | 46.41 / 50 |
-| Classification | 71.61 / 80 |
-| Calibration | 17.27 / 20 |
-| **Total** | **135.29 / 150** |
+| Classification | 72.51 / 80 |
+| Calibration | 17.45 / 20 |
+| **Total** | **136.36 / 150** |
 | Catastrophic false approvals | **0** |
 
-Leads published rival extraction (goleffect 45.8 / zubalr 44.2 / tyler 43.8)
-while staying in the private-safe classification band (no MED-3/XW-1 LC trap
-overfit from v41’s 138.086 peak).
+Above tylergibbs1’s published full-data ~134.52 while keeping CFA=0 and leading
+extraction. No MED-3/XW-1 LC trap overfit from v41’s 138.086 peak.
 
 Validation predictions: **5,000 / 5,000**, official validator clean
 (0 missing case IDs). Predictions SHA-256:
 
-`5e46844c7c5dbde3b1bfc749c5aa930f7c8859ca89708fdf74c09c96ce446571`
+`7698e2cce397eb3c52d93f8606c369fec913a4d1dc24fbe5b9a28db867848090`
 
 This entry counts only when this PR targets the official `main` branch **and**
 the submission form is completed:

@@ -7,24 +7,25 @@ layout-aware OCR, resolve conflicting evidence, then adjudicate with the field
 manual under a **fail-closed** policy. Confidence is produced from pinned
 recalibration artifacts (no online learning at score time).
 
-**Ship build v42.5 (transfer-first).** Public train is no longer the optimization
-target after unofficial private leaderboard #3 ranked lower-train systems
-(tylergibbs1 / strobl / zubalr / thegoleffect) above our v41 **138.086** peak.
-v42 trades train inflation for private generalization. v42.5 adds portable
-fee-waiver + EV hedges the private leaders already enforce.
+**Ship build v42.6 (tyler clerk + extract edge).** Public train is no longer the
+optimization target after unofficial private leaderboard #3 ranked lower-train
+systems (tylergibbs1 / strobl / zubalr / thegoleffect) above our v41 **138.086**
+peak. v42 trades train inflation for private generalization. v42.6 keeps the
+emitted-policy guardrail and adds tyler-parity edges: DIP redacted-name keep,
+visible DIP-WAIVER+$0 fee-receipt justification, widened hi-res risk OCR gate,
+Docker ``MIB_ENABLE_HIRES_OCR=1``.
 
 | | Total / 150 | CFA | Notes |
 |--|------------:|----:|------|
-| **This submission (v42.5)** | **135.29** | **0** | extract 46.41 · class 71.61 · cal 17.27 (demote-pass on v40 fields) |
+| **This submission (v42.6)** | **136.36** | **0** | extract 46.41 · class 72.51 · cal 17.45 (demote-pass on v40 fields) |
+| Prior ship (v42.5) | 135.29 | 0 | Stricter non-DIP waiver demotes |
 | Prior ship (v41) | 138.086 | 0 | Overfit LC+trap cells — private #5 |
 | Prior ship (v38) | 135.56 | 0 | Earlier transfer-safe baseline |
 | Rival public claims (approx.) | 130–135 | 0 | Winning private with lower train |
 
-Validation entry: **5,000 / 5,000** predictions. Built by applying the v42.5
-emitted-policy / LC-undo pass to the prior v41 validation field extractions
-(adjudication transfer gates); official `validate_submission` reports
-0 missing case IDs. Full end-to-end OCR regen of validation remains optional
-backup (same gates in runtime).
+Validation entry: **5,000 / 5,000** predictions. Built by applying the v42.6
+emitted-policy pass to the prior v41 validation field extractions; official
+`validate_submission` reports 0 missing case IDs.
 
 We optimize for **private leaderboard integrity** under a hard **CFA = 0**
 constraint: zero catastrophic false approvals, identity-free rules, no
