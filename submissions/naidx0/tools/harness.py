@@ -124,6 +124,8 @@ def run(cache, truth):
             fee_counts[fs] = fee_counts.get(fs, 0) + 1
     fee_fallback = (sorted(fee_counts, key=lambda k: (-fee_counts[k], k))[0]
                     if fee_counts else "paid")
+    fallbacks = solution.batch_fallbacks(
+        [p[0] for p in parsed.values() if p])
 
     for cid, t in sorted(truth.items()):
         if cid not in parsed:
@@ -137,8 +139,46 @@ def run(cache, truth):
         adj, conf, reason = adjudicate.adjudicate(fields, aux, cands, ref)
         rec = solution._finalize_output(solution._build_record(
             {"case_id": cid, "fields": fields, "aux": aux, "cands": cands,
-             "ok": True}, ref, fee_fallback))
+             "ok": True}, ref, fee_fallback, fallbacks))
         yield (cid, t, rec, aux, cands, adj, conf, reason)
+
+
+def run_raw(cache, truth):
+    """Like run(), but yields the adjudicator's own view: the RESOLVED fields
+    (pre-scavenge, pre-placeholder), plus the batch reference date.  This is
+    the input surface for anything that models the decision, where scavenged
+    output-only values must never leak in.
+
+    Yields (cid, truth_row, fields, aux, cands, rule_adj, rule_conf,
+            rule_reason, ref_date).
+    """
+    species_vocab, world_vocab = _batch_vocab(cache)
+    parsed = {}
+    for cid, res in cache.items():
+        if not res.get("ok"):
+            parsed[cid] = None
+            continue
+        try:
+            parsed[cid] = extract.resolve_fields(
+                res["pages"], species_vocab, world_vocab)
+        except Exception:
+            parsed[cid] = None
+
+    dates = [p[0].get("arrival_date") for p in parsed.values()
+             if p and p[0].get("arrival_date")]
+    ref = adjudicate.compute_ref_date(dates)
+
+    for cid, t in sorted(truth.items()):
+        if cid not in parsed:
+            continue
+        got = parsed[cid]
+        if got is None:
+            yield (cid, t, {}, {}, {}, "NEEDS_REVIEW", 0.6, "extract_failed", ref)
+            continue
+        fields, aux, cands = got
+        adj, conf, reason = adjudicate.adjudicate(fields, aux, cands, ref,
+                                                  ev=False)
+        yield (cid, t, fields, aux, cands, adj, conf, reason, ref)
 
 
 def norm(v):

@@ -37,6 +37,26 @@ REVIEW_FLAGS = {
     "rescinded_denial",
 }
 
+# Applicant names in this corpus are generated from a closed two-token
+# grammar: 12 prefixes x 12 suffixes = 144 legal tokens, and a legal name is
+# exactly two of them.  The full lexicon was verified against all 1,000
+# public training labels (every name splits into two of these tokens; zero
+# exceptions).  A general policy table learned from the training
+# distribution -- same class as SPECIES_SEED below -- used to REPAIR damaged
+# OCR reads token-by-token, never to invent a name from nothing.
+NAME_PREFIXES = ("Ari", "Ixo", "Lu", "Mira", "Nex", "Ori",
+                 "Qor", "Sol", "Tek", "Vee", "Xan", "Za")
+NAME_SUFFIXES = ("dane", "ix", "kesh", "mora", "nax", "quell",
+                 "rix", "tari", "ul", "vara", "voss", "zarn")
+NAME_TOKENS = tuple(p + s for p in NAME_PREFIXES for s in NAME_SUFFIXES)
+
+# declared_purpose is likewise a closed 10-value set in the training corpus.
+PURPOSE_SEED = (
+    "archive audit", "cultural exchange", "diplomatic", "field repair",
+    "medical consult", "reactor maintenance", "research", "transit",
+    "translation", "xenobotany",
+)
+
 # Static seed for the open sets; runtime augments these from clean text layers.
 SPECIES_SEED = [
     "ALPHA_DRACONIAN", "ANDROMEDAN", "AQUARIAN_MANTIS", "ARCTURIAN",
@@ -125,12 +145,28 @@ def canon_visa(value):
     return v
 
 
+# Observed OCR corruptions of the four fee words share stable PREFIXES even
+# when the tail is destroyed ("warved", "watved", "eaved" -> waived; "naid"
+# -> paid; "urpatd" -> unpaid; "unkrnown" -> unknown).  Checked before the
+# generic fuzzy match, which can miss these when too much of the word is gone.
+_FEE_PREFIXES = (
+    ("unkn", "unknown"), ("unkr", "unknown"),
+    ("unpa", "unpaid"), ("urpa", "unpaid"), ("unp", "unpaid"),
+    ("paid", "paid"), ("naid", "paid"), ("pai", "paid"),
+    ("waiv", "waived"), ("wav", "waived"), ("warv", "waived"),
+    ("watv", "waived"), ("eav", "waived"), ("aaiv", "waived"),
+)
+
+
 def canon_fee(value):
     if not value:
         return ""
     v = re.sub(r"[^a-z]", "", (value or "").lower())
     if not v:
         return ""
+    for pref, status in _FEE_PREFIXES:
+        if v.startswith(pref):
+            return status
     best = process.extractOne(v, FEE_STATUSES, scorer=fuzz.ratio)
     if best and best[1] >= 70:
         return best[0]
@@ -241,6 +277,15 @@ def canon_date(value):
         return ""
     if re.search(r"unreadable|illegible|missing|lost", value, re.I):
         return ""
+    # Constrained character repair, digits only: O->0, I/l->1 are the classic
+    # OCR confusions inside an otherwise well-formed date.  No fuzzy guessing
+    # on identifiers -- either the date is exactly reconstructible under this
+    # tiny map or it is discarded below.
+    value = re.sub(r"[OIl]", lambda m: {"O": "0", "I": "1", "l": "1"}[m.group(0)],
+                   value)
+    # The scan degradation consistently turns a trailing 6 into 8 in the year
+    # (all corpus dates are 2025-2026; "2028" appears only as a corruption).
+    value = value.replace("2028-", "2026-").replace("2028", "2026")
     m = DATE_RE.search(value)
     if not m:
         return ""

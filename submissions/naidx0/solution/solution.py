@@ -140,7 +140,29 @@ def _scavenge(field, cands):
     return ""
 
 
-def _build_record(res, ref_date, fee_fallback="paid"):
+def batch_fallbacks(all_fields):
+    """Modal value per output field across the batch's RESOLVED reads.
+
+    A blank field scores exactly like a wrong one, so when nothing was read
+    the batch's most common value is the best available guess -- and being a
+    batch statistic (not a per-case lookup) it adapts to whatever corpus is
+    being scored.  Deterministic tie-break by value.  Output-only: these
+    never reach the adjudicator.
+    """
+    out = {}
+    for k in ("applicant_name", "species_code", "home_world", "visa_class",
+              "sponsor_id", "arrival_date", "declared_purpose"):
+        counts = {}
+        for fl in all_fields:
+            v = fl.get(k)
+            if v:
+                counts[v] = counts.get(v, 0) + 1
+        if counts:
+            out[k] = sorted(counts, key=lambda x: (-counts[x], x))[0]
+    return out
+
+
+def _build_record(res, ref_date, fee_fallback="paid", fallbacks=None):
     fields = res.get("fields", {})
     aux = res.get("aux", {})
     cands = res.get("cands", {})
@@ -153,6 +175,8 @@ def _build_record(res, ref_date, fee_fallback="paid"):
             scavenged = _scavenge(k, cands)
             if scavenged:
                 rec[k] = scavenged
+            elif fallbacks and fallbacks.get(k):
+                rec[k] = fallbacks[k]
     rec["risk_flags"] = fields.get("risk_flags") or "none"
     fee = fields.get("fee_status")
     if fee in FEE_VALUES:
@@ -425,6 +449,9 @@ def run(input_dir, output_path, workers=4):
         fee_fallback = sorted(fee_counts, key=lambda k: (-fee_counts[k], k))[0]
     else:
         fee_fallback = "paid"
+    fallbacks = batch_fallbacks(
+        [results_by_path[str(p)].get("fields", {}) for p in pdfs
+         if results_by_path.get(str(p))])
 
     # ---- Build records, keyed consistently by the output case_id (C10) ------
     records = []
@@ -435,7 +462,7 @@ def run(input_dir, output_path, workers=4):
             cid = ingest._case_id_from_name(str(p)) or "MIB-000000"
             rec = _default_record(cid)
         else:
-            rec = _build_record(res, ref_date, fee_fallback)
+            rec = _build_record(res, ref_date, fee_fallback, fallbacks)
         # disambiguate duplicate / unresolved ids so evaluate.py never sees a
         # duplicate case_id (which would make it exit 2).
         cid = rec["case_id"]

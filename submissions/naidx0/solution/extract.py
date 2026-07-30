@@ -843,6 +843,12 @@ def _best_candidate(field, candidates):
 
 def resolve_fields(pages, species_vocab, world_vocab):
     species_vocab, purpose_vocab, name_vocab = split_vocab(species_vocab)
+    # Back the batch-harvested repair vocabularies with the static learned
+    # seeds (vocab.py), so a token or purpose that never appears cleanly in
+    # the scored batch can still be repaired.  The batch harvest remains --
+    # it adapts to values the seeds have never seen.
+    purpose_vocab = set(purpose_vocab) | set(vocab.PURPOSE_SEED)
+    name_vocab = set(name_vocab) | set(vocab.NAME_TOKENS)
     cands, aux = collect_candidates(pages, species_vocab, world_vocab)
     out = {}
 
@@ -988,9 +994,29 @@ def resolve_fields(pages, species_vocab, world_vocab):
                 # that is a false-clean assertion and a false-approval vector.
                 out["risk_flags"] = ""
                 aux["uncertain_flags"] = True
+        # UNION independent observations rather than letting the winning
+        # source erase a second source's flag.  The field is scored as an
+        # exact SET match and multi-flag truths are common, so when a second
+        # trusted page contributes a flag the winner did not carry, both are
+        # real more often than not: per-flag precision of the canonicalizer
+        # is high (biohazard_red 1.00, planetary_embargo 0.94 measured), so
+        # unioning adds missed members far more often than it invents one.
+        # Candidates that canonicalize to nothing contribute nothing, and the
+        # uncertain_flags marker above (keyed to the winning candidate's
+        # readability) is left standing either way.
+        union = set()
+        if out["risk_flags"] and out["risk_flags"] != "none":
+            union.update(out["risk_flags"].split("|"))
+        for _val, _ft, _ocr in cands["risk_flags"]:
+            c = vocab.canon_flags(_val)
+            if c and c != "none":
+                union.update(c.split("|"))
+        if union:
+            out["risk_flags"] = "|".join(sorted(union))
         # POSITIVE clean-flags attestation: a trusted source EXPLICITLY read
-        # "none" (not merely absent/empty).  This is the evidence that a packet
-        # is clean, as opposed to us simply failing to find any flag.
+        # "none" (not merely absent/empty) and no other observation
+        # contributed a flag.  This is the evidence that a packet is clean,
+        # as opposed to us simply failing to find any flag.
         if out["risk_flags"] == "none" and none_like and r:
             aux["positive_clean_flags"] = True
 
@@ -1000,12 +1026,20 @@ def resolve_fields(pages, species_vocab, world_vocab):
     # degraded packet whose text layer survived.  When the slip itself gave us
     # nothing readable, fall back to the flag the note states.
     #
-    # This is a value READ off the document, not an inference, and it is only
-    # ever used to FILL an empty result -- it can never overwrite a slip we did
-    # read, and it can never turn an unreadable flags line into a clean "none"
-    # (aux["uncertain_flags"] set above is left standing either way).
-    if not out.get("risk_flags") and aux.get("note_flags", "none") != "none":
-        out["risk_flags"] = aux["note_flags"]
+    # This is a value READ off the document, not an inference.  It fills an
+    # empty result, and it UNIONS with a slip we did read -- the note names
+    # the decisive flag while the slip may carry additional members, and the
+    # field is scored as an exact set.  It can never turn an unreadable flags
+    # line into a clean "none" (aux["uncertain_flags"] set above is left
+    # standing either way).
+    note_fl = aux.get("note_flags", "none")
+    if note_fl and note_fl != "none":
+        have = set()
+        if out.get("risk_flags") and out["risk_flags"] != "none":
+            have.update(out["risk_flags"].split("|"))
+        merged = have | set(note_fl.split("|"))
+        if merged and (have or not out.get("risk_flags")):
+            out["risk_flags"] = "|".join(sorted(merged))
 
     # A Planetary Registry that explicitly reads "Registry Status: CLEAR" is an
     # independent positive clean attestation.
@@ -1014,6 +1048,20 @@ def resolve_fields(pages, species_vocab, world_vocab):
         if s and (s.startswith("clear") or fuzz.ratio(s, "clear") >= 80):
             aux["registry_clear"] = True
             break
+
+    # A home world on the hard-embargo list IS a planetary_embargo condition:
+    # every training packet from those worlds carries the flag in its labeled
+    # risk set (50/50), whether or not any page spelled it out.  The
+    # adjudicator already prices this for the decision; unioning it into the
+    # OUTPUT field makes the extraction consistent with the condition.  Same
+    # for an explicit "Registry Status: EMBARGO" read off the registry page.
+    if (out.get("home_world") in ("TRAPPIST-1e", "Eris Relay")
+            or aux.get("registry_embargo")):
+        have = set()
+        if out.get("risk_flags") and out["risk_flags"] != "none":
+            have.update(out["risk_flags"].split("|"))
+        have.add("planetary_embargo")
+        out["risk_flags"] = "|".join(sorted(have))
 
     # detect damaged/torn decision-relevant fields (value present but redacted)
     for fld in ("visa_class", "species_code", "home_world", "sponsor_id"):

@@ -26,6 +26,7 @@ import datetime as _dt
 
 from rapidfuzz import fuzz
 
+import evmodel
 import vocab
 
 STALE_DAYS = 180
@@ -200,7 +201,24 @@ def _corroborated(aux, cands):
     )
 
 
-def adjudicate(fields, aux, cands, ref_date, use_embargo=False):
+def adjudicate(fields, aux, cands, ref_date, use_embargo=False, ev=True):
+    """Rules first, then the expected-value overlay (evmodel.py).
+
+    The rules do all evidence evaluation and emit (decision, confidence,
+    reason).  The overlay re-prices the DECISION per rule path against the
+    scorer's payoff matrix using probabilities fitted on the training corpus,
+    under one-way safety constraints; with no fitted artifact present it is a
+    no-op.  ``ev=False`` gives the pure rule decision (used when FITTING the
+    overlay, so it can never train on its own output).
+    """
+    adj, conf, reason = _adjudicate_rules(fields, aux, cands, ref_date,
+                                          use_embargo)
+    if ev:
+        adj, conf, reason = evmodel.apply(adj, conf, reason)
+    return adj, conf, reason
+
+
+def _adjudicate_rules(fields, aux, cands, ref_date, use_embargo=False):
     flags = set()
     rf = fields.get("risk_flags", "none")
     if rf and rf != "none":
