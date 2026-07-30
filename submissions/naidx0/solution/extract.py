@@ -842,16 +842,23 @@ def _consensus_name(candidates, name_vocab):
     behaviour.
     """
     ranks = FORM_RANK.get("applicant_name", {})
+
+    def _legal(name):
+        ws = name.split()
+        return len(ws) == 2 and all(w in vocab.NAME_TOKENS for w in ws)
+
     prepared = []
     for value, form_type, from_ocr in candidates:
         name = _clean_name(value)
         if not name:
             continue
-        if from_ocr:
-            name = _canon_name(_trim_name_tail(name), name_vocab)
+        # repair EVERY reading against the closed token grammar (text-layer
+        # names can be pre-damaged too; repair only fires on an unambiguous
+        # win, so an exact read passes through untouched)
+        name = _canon_name(_trim_name_tail(name), name_vocab)
         if not name:
             continue
-        prepared.append((name, form_type, bool(from_ocr)))
+        prepared.append((name, form_type, bool(from_ocr), _legal(name)))
     if not prepared:
         return None
     clusters = []
@@ -867,19 +874,27 @@ def _consensus_name(candidates, name_vocab):
         # a text-layer reading is worth more than an OCR one; distinct form
         # types (not repeated reads of one page) are what constitute support
         by_ft = {}
-        for _name, ft, ocr in members:
+        for _name, ft, ocr, _lg in members:
             by_ft[ft] = by_ft.get(ft, False) or not ocr
         return (sum(3 if trusted else 1 for trusted in by_ft.values()), len(by_ft))
 
     def cluster_key(members):
         sc, ndistinct = cluster_score(members)
-        # deterministic: score, breadth, then the best member's rank, then text
+        # LEGALITY FIRST: every genuine applicant name is exactly two tokens
+        # of the closed grammar, so a cluster containing a fully-legal
+        # reading outranks any amount of support behind an illegal one -- a
+        # clean "Tekdane Ixoix" on the sponsor letter must beat the intake
+        # form's "Trkdsne beobe" even though the intake outranks it.  The
+        # trap this cannot fix (a LEGAL name belonging to an adjacent
+        # applicant) is exactly as reachable under the old ranking.
+        legal = any(m[3] for m in members)
         best = max(members, key=lambda m: ((0 if m[2] else 100) + ranks.get(m[1], 0)))
-        return (sc, ndistinct, (0 if best[2] else 100) + ranks.get(best[1], 0),
-                best[0])
+        return (legal, sc, ndistinct,
+                (0 if best[2] else 100) + ranks.get(best[1], 0), best[0])
 
     winner = max(clusters, key=cluster_key)
-    return max(winner, key=lambda m: ((0 if m[2] else 100) + ranks.get(m[1], 0),
+    return max(winner, key=lambda m: (m[3],
+                                      (0 if m[2] else 100) + ranks.get(m[1], 0),
                                       m[0]))[0]
 
 
