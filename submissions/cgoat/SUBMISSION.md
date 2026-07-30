@@ -16,25 +16,27 @@ docker run --rm --network none \
 
 An offline document pipeline: PyMuPDF separates each page's trusted visible text
 from untrusted hidden spans, PP-OCRv4 (via ONNX Runtime) reads the scanned
-pages, noisy readings are snapped to the closed field vocabularies, page
-evidence is merged by the field manual's precedence order, and a hand-written
-policy engine produces the adjudication — including a revoked-sponsor check
-that self-updates from each batch's own sponsor-id frequency rather than a
-fixed list, so it catches revoked sponsors beyond the ones the manual names
-explicitly. Confidence comes from a 27-weight logistic model fitted on the
-public training labels. No LLM, no VLM, no cloud OCR, no network. See
-`MEMO.md` for the details, the failure modes, and what I would do with
-another week.
+pages as the primary engine, with a targeted Tesseract second pass on the
+minority of pages where a scored field is still missing (the two engines fail
+on different packets, not just at different rates), noisy readings are
+snapped to the closed field vocabularies, page evidence is merged by the
+field manual's precedence order, and a hand-written policy engine produces
+the adjudication — including a revoked-sponsor check that self-updates from
+each batch's own sponsor-id frequency rather than a fixed list, so it catches
+revoked sponsors beyond the ones the manual names explicitly. Confidence
+comes from a 27-weight logistic model fitted on the public training labels.
+No LLM, no VLM, no cloud OCR, no network. See `MEMO.md` for the details, the
+failure modes, and what I would do with another week.
 
 ## Runtime contract
 
 | Requirement | This submission |
 | --- | --- |
 | Network at runtime | None. No API keys, no external services. |
-| LLM / VLM / cloud OCR | None. PyMuPDF, PP-OCRv4 (ONNX Runtime, CPU) only. |
+| LLM / VLM / cloud OCR | None. PyMuPDF, PP-OCRv4 + Tesseract (both offline, CPU) only. |
 | Image size | 0.32 GiB uncompressed (limit 4 GiB) |
 | Model artifacts | `mib/calibration.json` (~1 KB) and `mib/lexicon.json` (~5 KB) |
-| Runtime | 0.64 s/PDF measured on 4 vCPU / 8 GiB (budget 6 s/PDF) |
+| Runtime | 1.48 s/PDF measured on 4 vCPU / 8 GiB (budget 6 s/PDF) |
 | Read-only root filesystem | Yes; all scratch under `/tmp` |
 
 `predictions.jsonl` here was produced by that image running against
@@ -45,8 +47,8 @@ with 5,000 valid records and no missing case ids.
 
 ## Reproducibility
 
-On the public training split the same image scores **122.34 / 150** with the
-challenge's own `scripts/evaluate.py`: extraction 42.55/50, classification
+On the public training split the same image scores **122.56 / 150** with the
+challenge's own `scripts/evaluate.py`: extraction 42.78/50, classification
 63.66/80, calibration 16.12/20, 0 missing cases, and 6 catastrophic false
 approvals against 431 true denials.
 

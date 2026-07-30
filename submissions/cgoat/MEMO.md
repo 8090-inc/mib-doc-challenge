@@ -1,13 +1,14 @@
 # MIB Doc Challenge — technical memo
 
 **Score on the public training split (challenge `scripts/evaluate.py`):**
-`122.34 / 150` — extraction `42.55/50`, classification `63.66/80`, calibration
+`122.56 / 150` — extraction `42.78/50`, classification `63.66/80`, calibration
 `16.12/20`, 0 missing cases, 6 catastrophic false approvals against 431 true
-denials. Runtime 0.63 s/PDF on 4 vCPU against a 6 s/PDF budget; image 0.32 GiB.
+denials. Runtime 1.23 s/PDF on 4 vCPU against a 6 s/PDF budget; image 0.32 GiB.
 
 No LLM, no network, no API keys. PyMuPDF for the text layer, PP-OCRv4 via ONNX
-Runtime for scans, a hand-written policy engine, and one 27-weight logistic
-model for confidence, fitted on the public training labels.
+Runtime for scans (with a Tesseract second pass on the minority of pages
+where a scored field is still missing), a hand-written policy engine, and one
+27-weight logistic model for confidence, fitted on the public training labels.
 
 ## What the data actually is
 
@@ -341,6 +342,74 @@ in-sample 0.114 is optimistic.
    trades into is the wrong shape for evidence that's structurally missing
    rather than merely unresolved, and the gain does not survive outside that
    one bucket.
+
+   I then tried the narrower version this points at: scope the classifier to
+   only the `risk_panel_unread` bucket (the sole source of signal), and gate
+   an APPROVED override behind a confidence threshold on `P(APPROVED)` so a
+   marginal call falls back to the rule's own conservative default instead of
+   the model's raw expected-value pick. At threshold 0.75 and one fold split
+   this looked like a real, contained win: +0.47/150, catastrophic false
+   approvals only 6 -> 7. But rerunning the same threshold across five
+   different 5-fold splits gave +0.47, -0.18, +0.41, -0.21, +0.05 - averaging
+   to essentially zero, with false approvals elevated (6 to 13) in every
+   split regardless of sign. The 207-example bucket is too small for a stable
+   estimate at this granularity: the first split's good number was fold-split
+   luck, not signal. Not shipped in any form - unrestricted, scoped, or
+   confidence-gated all fail the same honesty check once measured against
+   more than one random split.
+6. **Generic OCR preprocessing before PP-OCR — tested, not shipped.** The
+   Tesseract fallback path does real preprocessing (deskew, glyph-footprint
+   masking, contrast stretch, upscaling); the shipped RapidOCR path hands it
+   the raw decoded image with none of that, on the theory that PP-OCR's own
+   detector already handles it. I checked that theory on the 40 packets where
+   a closed-vocabulary field (`declared_purpose`, `home_world`, `species_code`)
+   was never recovered at all, comparing whether the ground-truth value showed
+   up anywhere in the raw OCR output (fuzzy substring match) before vs. after
+   preprocessing the image:
+   - Upscale (2x cubic) + CLAHE contrast enhancement: **8/40 recall either
+     way** — some individual cases flip, but it nets to zero.
+   - Adding median-blur + non-local-means denoising on top: **recall dropped
+     to 2/40** — actively harmful. The denoising smooths away exactly the
+     fine glyph-stroke edges PP-OCR's recognizer depends on at this
+     resolution.
+   Neither variant shipped. The 70% of cases (28/40) that failed under every
+   variant tested look like genuine information loss in the synthetic
+   generator's degradation, not something a preprocessing pass can restore -
+   consistent with the earlier fine-tuning result, which also found the
+   off-the-shelf pretrained recognizer close to the ceiling this corpus
+   allows. A real gain here would need image *restoration* (a learned
+   super-resolution/denoising model trained on this exact degradation, not a
+   generic OpenCV filter), which is out of scope for the time available.
+
+## A second OCR engine as a targeted fallback, not a preprocessing pass
+
+Generic image preprocessing ahead of PP-OCR was a dead end (above). But
+comparing *which specific packets* each engine fails on told a different
+story than comparing their aggregate scores: on the 40 packets where a
+closed-vocabulary field was never recovered by RapidOCR at all, plain
+Tesseract - run through its existing deskew/glyph-mask/contrast-stretch
+pipeline - recovered 14/40 on its own, and the *union* of the two engines
+recovered 17/40. RapidOCR is still the better engine on average (that is why
+it is primary), but the two make different mistakes on the same degraded
+scans, and that difference is real, extractable signal.
+
+`document.py`'s `read_packet` now retries a page with Tesseract only when
+RapidOCR's own read left a scored field (`species_code`, `home_world`,
+`declared_purpose`, `visa_class`, `fee_status`) missing on a page kind that
+should carry it - not on every scan, so the added OCR cost lands on the
+minority of already-troublesome pages. Anything the fallback recovers is
+always marked uncertain, so a second engine's guess can supplement extraction
+but can never itself drive a decision (this also subsumes and supersedes the
+narrower fee-status-only scan-recovery from the same investigation).
+
+Measured on a full cache rebuild and verified with the official
+`scripts/evaluate.py` in a rebuilt Docker image: 55 previously-wrong or
+-blank field reads now correct (`declared_purpose` 24, `species_code` 10,
+`fee_status` 9, `home_world` 9, `visa_class` 3), **0 regressions**,
+classification and calibration unchanged (confirming the uncertain-flag
+firewall holds), catastrophic false approvals unchanged at 6. Extraction
+42.55 -> 42.78/50, total 121.60 -> 122.56/150. Runtime rose from 0.63 to
+1.23 s/PDF on 4 vCPU - still five times under the 6 s/PDF budget.
 
 ## Reproducing
 
