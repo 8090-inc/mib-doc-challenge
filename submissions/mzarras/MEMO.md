@@ -146,6 +146,21 @@ six form types (cross-page agreement as a first-class probability, not a bonus t
 active-learning annotation of the 286-case residual pool, where labeling effort concentrates
 exactly where the EV layer is least certain.
 
+## How this was built
+
+I used LLM tooling from day one, as the challenge rules permit — first to get oriented in an
+unfamiliar problem (reading the evaluator source, the field manual, and the organizer's issue
+rulings, and pulling apart the scoring math), then to shape a plan, and then as agents doing the
+heavy implementation work. The part I consider my actual contribution is the process wrapped
+around them: the plan was torn apart by independent adversarial review twice before any code was
+written (the second round caught a real bug in the first round's fix), every workstream's output
+was re-verified against the code and the official evaluator before merging, the memo itself went
+through a blind forced-rank review against two competitors' memos with identities stripped, and
+the holdout/ledger discipline exists precisely because generated code and analysis are
+untrustworthy until independently checked. Every architectural decision, risk trade-off, and
+rejected shortcut in this memo — including declining the answer-key channel that tops the
+self-reported leaderboard — was a call I made and can defend.
+
 ---
 *Extended audit trail — every learned constant with its in-packet evidence basis, per-gate
 measurements, and the EV model card — is in `AUDIT.md`.*
