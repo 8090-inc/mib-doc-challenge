@@ -1,12 +1,17 @@
 # Technical Memo — Intergalactic Intake
 
-**Training set (public labels, official evaluator): 131.2 / 150** —
-extraction 42.4/50, classification 71.6/80, calibration 17.1/20, zero
-missing cases, 11 catastrophic false approvals (down from 41 before the
-expected-value layer). 5-fold cross-validation of the decision layer:
-63.1/80 classification, 15.5/20 calibration — within ~1.4 points of
-in-sample, so the layer is not memorizing. Runtime: 1.96 s/PDF for the full
-pipeline inside the contest Docker limits (4 vCPU, network none).
+**Calibration choice: coarse (CV-validated), not overfit.** Training-set
+in-sample 126.3 / 150 (extraction 42.4/50, classification 67.7/80,
+calibration 16.3/20, zero missing cases). A finer per-(path×visa×fee×biometric)
+calibration reaches 131.2 in-sample but collapses to 124.6 under 5-fold CV —
+classic overfitting of the bucket histogram on 1,000 packets. We ship the
+**coarse (path × packet-hygiene)** variant: 5-fold CV 125.4 ± 1.5
+(classification 66.9, calibration 16.1), and — crucially — its bucket
+estimates are stable enough that confidence stays well-calibrated on unseen
+data (Brier 0.093), which is what the private validation/leaderboard
+measures. The expected-value layer still drops catastrophic false approvals
+from 41 → ~11. Runtime: ~2 s/PDF inside the contest Docker limits (4 vCPU,
+network none).
 
 ## Approach
 
