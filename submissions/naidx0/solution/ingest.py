@@ -375,6 +375,20 @@ def _ocr_variants(arr):
         txt = _tess(best_clean, 4)
         if _ocr_quality(txt) > best_score:
             best_text, best_score = txt, _ocr_quality(txt)
+    # Complementary sparse-text pass (psm 11) on the winning binarisation.
+    # Page-layout segmentation (psm 6/4) reads the structured label:value
+    # blocks but drops isolated fragments -- stamps, annotations, a lone flag
+    # word on a damaged slip.  Sparse mode recovers exactly those.  The two
+    # outputs are CONCATENATED, never merged: downstream extraction sees both
+    # readings, and the candidate union/consensus layers treat a value seen
+    # by both passes as corroborated rather than duplicated.
+    sparse = _tess(best_clean, 11)
+    if sparse.strip():
+        seen = set(ln.strip() for ln in best_text.splitlines() if ln.strip())
+        extra = [ln for ln in sparse.splitlines()
+                 if ln.strip() and ln.strip() not in seen]
+        if extra:
+            best_text = best_text + "\n" + "\n".join(extra)
     return best_text, best_score, first_clean
 
 

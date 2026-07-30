@@ -652,6 +652,55 @@ def _add_candidate(cands, field, value, form_type, from_ocr):
     cands.setdefault(field, []).append((value, form_type, from_ocr))
 
 
+_FLAG_CONTEXT_RE = re.compile(r"obs|flag|risk|reason|finding", re.I)
+_UNDERSCORE_TOKEN_RE = re.compile(r"[A-Za-z]{3,25}_[A-Za-z_]{3,30}")
+
+
+def _page_flag_scan(page):
+    """Recover risk flags from the WHOLE page text of a flag-bearing page.
+
+    The labeled "Observed flags:" line is the primary channel, but on degraded
+    scans the label is often destroyed while the flag word itself survives
+    elsewhere in the OCR soup.  Three additional channels, page-gated to the
+    two form types that legitimately print flags (B-13 slip, adjudicator
+    note), each of which can only ADD flags -- never assert a clean "none":
+
+      1. canonical-name substring over space->underscore-folded lines (a flag
+         name printed intact but on an unlabeled line);
+      2. fuzzy 1-3-word n-grams, restricted to lines carrying an
+         obs/flag/risk/reason/finding context word, matched >= 76 against the
+         flag names with underscores stripped (label survived, value mangled);
+      3. underscore-shaped tokens anywhere on the page, through the standard
+         canonicalizer -- the token shape itself (letters_letters) keeps
+         ordinary prose out.
+    """
+    lines = list(page.get("ocr_lines") or [])
+    for s in page.get("text_spans") or []:
+        lines.append(s.get("text", ""))
+    found = set()
+    for line in lines:
+        low = " ".join(str(line).lower().split())
+        folded = low.replace(" ", "_")
+        for fl in vocab.RISK_FLAGS:
+            if fl in folded:
+                found.add(fl)
+        if _FLAG_CONTEXT_RE.search(low):
+            words = [w for w in re.split(r"[^a-z]+", low) if len(w) >= 3]
+            for i in range(len(words)):
+                for j in (1, 2, 3):
+                    if i + j > len(words):
+                        break
+                    gram = "".join(words[i:i + j])
+                    for fl in vocab.RISK_FLAGS:
+                        if fuzz.ratio(gram, fl.replace("_", "")) >= 76:
+                            found.add(fl)
+        for tok in _UNDERSCORE_TOKEN_RE.findall(str(line)):
+            c = vocab.canon_flag_token(tok)
+            if c:
+                found.add(c)
+    return found
+
+
 def collect_candidates(pages, species_vocab=frozenset(), world_vocab=frozenset()):
     """Return {output_field: [(value, form_type, from_ocr), ...]} and aux info."""
     cands = {}
@@ -697,6 +746,13 @@ def collect_candidates(pages, species_vocab=frozenset(), world_vocab=frozenset()
         # be read at all -> we cannot rule out a disqualifier -> force review.
         if ft == "B13" and page.get("illegible"):
             aux["uncertain_flags"] = True
+        # Whole-page flag recovery on the two flag-bearing form types; the
+        # candidates join the risk_flags union in resolve_fields.
+        if ft in ("B13", "NOTE"):
+            scanned = _page_flag_scan(page)
+            if scanned:
+                _add_candidate(cands, "risk_flags", "|".join(sorted(scanned)),
+                               ft, bool(page.get("from_ocr")))
         raw = parse_page_fields(page, species_vocab, world_vocab)
         for key, value in raw.items():
             from_ocr = key.startswith("ocr::")
@@ -959,6 +1015,15 @@ def resolve_fields(pages, species_vocab, world_vocab):
             out["fee_status"] = "waived" if total == 0 else "paid"
             aux["fee_from_amount"] = True
             break
+    # A visible waiver code in the strict grammar (DIP-WAIVER / HARDSHIP-nn)
+    # means the fee was waived, even when the status word was destroyed.  It
+    # never overrides a directly-read status.
+    if not out.get("fee_status"):
+        for wc in aux.get("waiver_code", []):
+            if re.search(r"DIP[\s_-]?WAIVER|HARDSHIP[\s_-]?\d{2,}",
+                         str(wc), re.I):
+                out["fee_status"] = "waived"
+                break
     # C2a: a fee-receipt page is PRESENT but its status could not be read ->
     # treat the fee as "unknown" (both for output and adjudication) rather than
     # silently letting it fall through to an APPROVAL.  Clean cases where the fee
