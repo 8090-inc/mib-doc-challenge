@@ -92,6 +92,11 @@ with the irreducible silent-denial pair the OOF analysis predicted. Calibration 
 Brier 0.069) is near its mathematical ceiling — with residual-pool accuracy around 58%, honest
 confidences cannot push Brier much lower.
 
+For comparison against self-reported full-train numbers elsewhere: the shipped configuration's
+combined score across all 1,000 public train cases — 800 tune + 200 holdout, weighted, with no
+refitting on the holdout — is **~127.0**. Fit and scored in-sample on all 1,000 the way most
+public claims are produced, it would read ~130–131; I report the honest split instead.
+
 ## Final round: reading and filling harder, adjudication guard untouched
 
 The last pre-ship round (127.02 -> 128.32, CFA still 0) attacked extraction only
