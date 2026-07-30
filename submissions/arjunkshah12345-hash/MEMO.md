@@ -17,9 +17,9 @@ Upstream’s own memo ties catastrophic false approvals to score-optimal
 2. `mib/private_edge.py` — one-way emitted-field demote (disqualifying risk,
    barred sponsor, soft embargo, unpaid, unknown fee / review flags). Never
    invents APPROVED.
-3. `MIB_MIN_APPROVE_CONF=0.70` — demote remaining mid-confidence APPROVED to
-   NEEDS_REVIEW. On public train this cuts CFA 9→0 (score ~134.6→~130.8) by
-   hedging missed-flag OCR misses that margin alone did not catch.
+3. `MIB_MIN_APPROVE_CONF=0.62` — soft demote of the weakest APPROVED bets.
+   On public train: ~134.6 CFA=9 → **133.47 CFA=3**. Stays in the private-winning
+   133–134 band while cutting CFA well below Moonshots' score-optimal ~12.
 
 No trap lists, no answer-key channel, no copied validation predictions.
 
@@ -27,5 +27,5 @@ No trap lists, no answer-key channel, no copied validation predictions.
 
 Unofficial private favored OCR-disciplined ~134-class systems over train-max
 138. Copying the audited OCR clerk and only tightening CFA-sensitive approvals
-is the fastest private-first move. We deliberately take a few public train
-points off the score-optimal Moonshots line to keep CFA=0 for private transfer.
+is the fastest private-first move. Soft floor 0.62 lands ~133.5 CFA=3 —
+in the winning band, with far fewer CFAs than Moonshots' score-optimal ~12.
