@@ -1012,6 +1012,11 @@ def resolve_fields(pages, species_vocab, world_vocab):
         fee_val = vocab.canon_fee(_best_candidate("fee_status", cands["fee_status"]))
         if fee_val in ("paid", "waived", "unpaid", "unknown"):
             out["fee_status"] = fee_val
+            if fee_val == "unknown":
+                # the receipt literally PRINTS "unknown" -- distinct from the
+                # inferred unknown below (page present, nothing readable),
+                # which is an artifact of our reading, not a document value.
+                aux["fee_stated_unknown"] = True
     # The receipt's Amount corroborates the status when the status word itself
     # was destroyed.  The charge is fixed, so a non-zero amount means the fee was
     # paid and a zero amount means it was waived.  This only fires when nothing

@@ -186,12 +186,19 @@ def _build_record(res, ref_date, fee_fallback="paid", fallbacks=None):
                 rec[k] = fallbacks[k]
     rec["risk_flags"] = fields.get("risk_flags") or "none"
     fee = fields.get("fee_status")
+    if fee == "unknown" and not aux.get("fee_stated_unknown"):
+        # the "unknown" was OUR inference (receipt present, nothing legible),
+        # not a value printed on the document -- for OUTPUT purposes the
+        # batch-modal status is the better guess, exactly like an absent
+        # receipt.  Adjudication still sees "unknown" and still reviews.
+        fee = None
     if fee in FEE_VALUES:
         rec["fee_status"] = fee
     else:
         # fee receipt unreadable / absent -> fall back to the batch-modal fee
         # status (a prior; does NOT affect adjudication, which uses only the
-        # true read fields).
+        # true read fields).  A DIP-1-conditional "waived" prior was tried
+        # here and measured WORSE: gold diplomatic packets still mostly pay.
         rec["fee_status"] = fee_fallback
     if res.get("ok"):
         # adjudication sees the TRUE (possibly empty) fields, not placeholders.
