@@ -352,7 +352,9 @@ def _adjudicate_rules(fields, aux, cands, ref_date, use_embargo=False):
         # not be read.  Those are not all review cases, so the rule is less
         # reliable than the gold statistic suggested.  Reverted to the measured
         # value.
-        return "NEEDS_REVIEW", 0.56, "fee_unknown"
+        # measured 0.765 on the current pipeline (n=51); emitted shrunk
+        # toward the mean per the usual small-bucket caution.
+        return "NEEDS_REVIEW", 0.70, "fee_unknown"
 
     # 8. Missing / unreadable arrival date (field manual: mark NEEDS_REVIEW).
     if not arrival:
