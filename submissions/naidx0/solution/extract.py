@@ -1091,20 +1091,16 @@ def resolve_fields(pages, species_vocab, world_vocab):
     # degraded packet whose text layer survived.  When the slip itself gave us
     # nothing readable, fall back to the flag the note states.
     #
-    # This is a value READ off the document, not an inference.  It fills an
-    # empty result, and it UNIONS with a slip we did read -- the note names
-    # the decisive flag while the slip may carry additional members, and the
-    # field is scored as an exact set.  It can never turn an unreadable flags
-    # line into a clean "none" (aux["uncertain_flags"] set above is left
-    # standing either way).
-    note_fl = aux.get("note_flags", "none")
-    if note_fl and note_fl != "none":
-        have = set()
-        if out.get("risk_flags") and out["risk_flags"] != "none":
-            have.update(out["risk_flags"].split("|"))
-        merged = have | set(note_fl.split("|"))
-        if merged and (have or not out.get("risk_flags")):
-            out["risk_flags"] = "|".join(sorted(merged))
+    # This is a value READ off the document, not an inference, and it is only
+    # ever used to FILL an empty result -- measured on the labeled corpus, a
+    # note's flag does NOT belong in the output set when the slip already
+    # yielded one (a note explaining a rescinded denial adds
+    # `rescinded_denial` to packets whose labeled set has only the slip's
+    # flags; unioning it flipped 3 exact matches to misses for every 1 it
+    # fixed).  It can never turn an unreadable flags line into a clean
+    # "none" (aux["uncertain_flags"] set above is left standing either way).
+    if not out.get("risk_flags") and aux.get("note_flags", "none") != "none":
+        out["risk_flags"] = aux["note_flags"]
 
     # A Planetary Registry that explicitly reads "Registry Status: CLEAR" is an
     # independent positive clean attestation.
@@ -1118,10 +1114,12 @@ def resolve_fields(pages, species_vocab, world_vocab):
     # every training packet from those worlds carries the flag in its labeled
     # risk set (50/50), whether or not any page spelled it out.  The
     # adjudicator already prices this for the decision; unioning it into the
-    # OUTPUT field makes the extraction consistent with the condition.  Same
-    # for an explicit "Registry Status: EMBARGO" read off the registry page.
-    if (out.get("home_world") in ("TRAPPIST-1e", "Eris Relay")
-            or aux.get("registry_embargo")):
+    # OUTPUT field makes the extraction consistent with the condition.
+    # NOTE: an explicit "Registry Status: EMBARGO" read does NOT qualify --
+    # Wolf-1061c registries print EMBARGO while only 5/77 of those packets
+    # carry the flag in their labeled set, so keying on the registry line
+    # added 21 spurious members for every handful it recovered.
+    if out.get("home_world") in ("TRAPPIST-1e", "Eris Relay"):
         have = set()
         if out.get("risk_flags") and out["risk_flags"] != "none":
             have.update(out["risk_flags"].split("|"))
