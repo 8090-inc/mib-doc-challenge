@@ -97,9 +97,26 @@ def _days_from_ref(arrival, ref):
         return 0.0
 
 
+# Rule paths the featurizer one-hots (fixed order; unknown paths get the
+# trailing bucket so future rules cannot shift indices).
+RULE_KEYS = (
+    "revoked_sponsor", "transit_visa", "unpaid_no_waiver", "stale_arrival",
+    "revoked_dip_illegible", "embargo_world", "fee_unknown",
+    "missing_arrival", "review_flag", "uncertain_flags", "damaged_field",
+    "attested_clean", "illegible_page", "name_conflict", "sponsor_conflict",
+    "unsupported_waiver", "med3_no_biometric", "insufficient_evidence",
+    "fee_unverified", "consensus_clean", "unverified_clean", "clean",
+    "extract_failed", "disqualifying_flag", "note_disqualifier",
+)
+
+
 def featurize(fields, aux, cands, rule_reason, ref):
     """Fixed-order numeric vector; see FEATURE_NAMES for the layout."""
     f = []
+    rk = rule_key(rule_reason)
+    for k in RULE_KEYS:
+        f.append(1.0 if rk == k else 0.0)
+    f.append(0.0 if rk in RULE_KEYS else 1.0)
     visa = fields.get("visa_class", "")
     for v in vocab.VISA_CLASSES:
         f.append(1.0 if visa == v else 0.0)
@@ -133,7 +150,8 @@ def featurize(fields, aux, cands, rule_reason, ref):
 
 
 FEATURE_NAMES = (
-    [f"visa_{v}" for v in vocab.VISA_CLASSES] + ["visa_unknown"]
+    [f"path_{k}" for k in RULE_KEYS] + ["path_other"]
+    + [f"visa_{v}" for v in vocab.VISA_CLASSES] + ["visa_unknown"]
     + [f"fee_{v}" for v in vocab.FEE_STATUSES] + ["fee_unresolved"]
     + [f"flag_{fl}" for fl in vocab.RISK_FLAGS] + ["n_flags", "flags_none"]
     + list(_AUX_KEYS)
