@@ -1,12 +1,12 @@
 # MIB Doc Challenge — Technical Memo
 
-The final candidate was developed on a frozen 700/150/150 split of the public
-training set; the sealed 150 was opened once after lock. It beat the original
-image by **+2.8128 on calibration**, **+6.3245 sealed**, and **+5.4619 on all
-1,000 cases**. A final rules-compliance pass reached **134.7171/150** on a fresh
-full-1,000 Docker run: 45.4722 extraction, 71.9300 classification, and 17.3149
-calibration. That score includes the safety cost: catastrophic false approvals
-rose from 1 to 12.
+The candidate was developed on a frozen 700/150/150 split of the public
+training set; the sealed 150 was opened once after lock. The promotion
+candidate beat the original image by **+2.8128 on calibration** and **+6.3245
+sealed**. After the final rules-compliance pass, a fresh full-1,000 Docker run
+reached **134.7171/150**, **+5.8907** over the original image: 45.4722
+extraction, 71.9300 classification, and 17.3149 calibration. That score
+includes the safety cost: catastrophic false approvals rose from 1 to 12.
 
 ## Approach
 
