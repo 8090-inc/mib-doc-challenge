@@ -1,123 +1,97 @@
-# Technical Memo — Visible-Evidence Hybrid
+# Technical Memo — Audited Visible-Evidence OCR
 
 ## Approach
 
-My submission treats the rendered page as the trust boundary. PDF-native text
-is useful, but this dataset demonstrates why it cannot be trusted blindly:
-white text, off-crop content, and hidden answer keys can all be present in the
-text layer without appearing to a reviewer. I inspect native spans and retain
-only spans that intersect the crop box and have sufficient contrast. Every page
-is also rendered at 220 DPI and OCRed with Tesseract. The OCR text is therefore
-derived from visible pixels and cannot see white-on-white prompt injections.
+This resubmission uses a deterministic, offline visible-evidence OCR pipeline.
+The runtime is reused under MIT from the public Calling Moonshots solution at
+commit `9ed5ed360ae40053dfee80bff09eef29a83a3980`, which is itself derived under
+MIT from Brian Pridgen's `handemanai` baseline at commit
+`4b37a7815bea79de0a01beca6eb6566e1611af73`. The original copyright and MIT
+permission notice, detailed model provenance, package licenses, and upstream
+technical memo are preserved in my public solution repository.
 
-The OCR stage has bounded, selective fallbacks. Ordinary pages use a grayscale
-PyMuPDF render. Low-confidence pages are retried with contrast enhancement and
-form-line removal. PyMuPDF and Poppler rasterize some damaged synthetic scans
-differently, so hard pages receive one independent Poppler render and the
-higher-quality OCR result wins. The system uses four processes and one
-Tesseract thread per process. It writes predictions incrementally and runs
-under the supplied read-only, network-disabled Docker contract.
+I did not copy another participant's validation predictions. The attached
+5,000 rows were generated independently by executing the attributed source
+against the checksum-verified public validation PDFs with networking disabled.
 
-Field extraction is evidence-aware rather than a single regex over concatenated
-text. Pages are classified as intake forms, biometric slips, sponsor letters,
-registry extracts, fee receipts, or manual notes. Candidate values receive the
-document precedence specified in the field manual. Explicit manual corrections
-outrank the original field, including sponsor corrections embedded in an intake
-page. Closed vocabularies (species, home world, visa, purpose, fee, and risk
-flags) use OCR-tolerant matching; names, dates, and sponsor IDs use
-context-specific parsers and conservative OCR-character repairs.
-Cross-document disagreements are retained as evidence unless a trusted final
-finding supersedes an inferred, non-explicit conflict.
+The rendered page is the trust boundary. Before rasterization, the system
+examines PDF spans for render mode, opacity, color, and crop intersection.
+White-on-white, off-crop, and other hidden text is removed so contrast
+enhancement cannot turn a fake answer key into OCR evidence. It never decodes
+barcodes and uses no LLM, VLM, cloud OCR, API key, or runtime network.
 
-The adjudicator is a hybrid of deterministic policy and two small offline
-models. A word-and-character TF-IDF logistic model is robust to both policy
-phrases and recurring OCR damage such as `DENIEN`, while an Extra Trees model
-consumes the resolved structured record. Small field classifiers fill non-risk
-closed-vocabulary fields only when the rule extractor is missing or the model
-is highly confident. Risk flags must come from visible evidence and are never
-inferred from packet correlations. Case identifiers are also removed before
-vectorization. Hard guardrails cover visible manual findings, disqualifying
-risks, revoked sponsors, transit classes, stale non-diplomatic packets, and
-unpaid fees. Manual findings are applied first, which prevents an old or
-crossed-out denial from overriding a later signed decision.
+RapidOCR provides text detection while a compact PP-OCRv5 English mobile
+recognizer reads visible text. Ordinary pages use a bounded low-resolution
+path; packets missing deny-relevant evidence receive a higher-resolution
+second view. Closed vocabularies constrain species, home world, visa class,
+purpose, fee, and risk extraction. Template-anchored readers recover damaged
+fee, flag, sponsor, world, and adjudicator-note regions. Cross-page candidates
+retain source authority, strike-through, correction, and agreement evidence.
 
-Policy-time missingness is separate from the required serialized output. The
-adjudicator sees an unread fee or visa as unknown. Fold-validated field models
-and fold-learned categorical priors may estimate unresolved output fields,
-including a neutral in-window date when the schema requires a date but the
-visible value is unreadable. Visible `$809` and `DIP-WAIVER` receipt geometry
-also recover fee status when the status word is damaged. A final one-way
-postcondition checks the emitted fields before confidence calibration:
-disqualifying risks, revoked non-diplomatic sponsors, transit classes, stale
-dates, and unpaid fees force denial, while review flags and unresolved core
-evidence can only demote an approval to review. Thus output-only estimates
-cannot leave a decision that contradicts the serialized row.
-The output-boundary idea was inspired by the public MIT-licensed
-`OUTPUT_ONLY_FALLBACKS` design in Abhishek Enaguthi's challenge solution;
-`ATTRIBUTION.md` in my solution repository records the source and the
-independent implementation details.
+Adjudication combines field-manual rules with evidence-only terminal guards.
+The guards may demote a terminal decision to `NEEDS_REVIEW`, but cannot invent
+an approval or denial. A small exported tree ensemble may resolve only the
+specific `insufficient_evidence` review path; it contains no case IDs or open
+applicant/sponsor identity values. Confidence uses a public-training-derived
+logistic and isotonic calibrator.
 
-I selected the text/structured blend and decision thresholds using stratified
-five-fold out-of-fold predictions. Model selection maximized the challenge's
-actual asymmetric classification score subject to no more than five
-catastrophic false approvals across the 1,000 public cases. Confidence is not
-the winning class probability. A separate logistic calibrator is trained on
-out-of-fold correctness using the complete probability vector, predicted
-class, model margin and disagreement, OCR quality, missingness, document mix,
-and explicit guardrail source.
+The entrypoint uses four worker processes, parent heartbeats, per-case
+deadlines, worker recycling, and atomic output replacement. It first writes a
+complete fallback file, checkpoints extraction state, and replaces the
+fallback only after final adjudication. A single native-library hang therefore
+does not erase the batch.
 
 ## Validation discipline and results
 
-The validation PDFs and their case IDs were never used as labels, pseudo-labels,
-or model-selection feedback. The pipeline contains no per-case lookup table and
-does not use filenames for anything beyond the required case ID.
+I froze the prior submission and compared candidates using only public training
+labels. The primary audit used a fixed 700/150/150 author split, label-blind
+layout groups, and group-disjoint folds. The two 150-case author holdouts were
+not used to fit the candidate.
 
-On five-fold out-of-fold public training predictions, the selected policy
-achieved 71.4% adjudication accuracy, 61.56/80 classification points,
-15.16/20 calibration points (mean Brier 0.1209), and five catastrophic false
-approvals. Emitted field accuracy is 94.0% species, 90.7% home world, 90.7%
-purpose, 89.0% visa class, 83.6% arrival date, 82.9% sponsor ID, and 82.8% fee
-status, for 42.53/50 extraction points. The combined development OOF estimate
-is 119.25/150. Because blend and threshold selection use these OOF predictions,
-this is still a development estimate rather than an untouched final audit.
+On those holdouts, this one-pass candidate scored 131.19 and 137.43; pooled it
+scored about 134.31. The frozen prior submission scored about 125.56 pooled on
+the same cases, for an estimated gain of about 8.75 points. A paired
+document-bootstrap comparison had a positive 95% lower bound. The upstream
+authors' fresh full-1,000 Docker audit reported 134.7171/150: 45.4722
+extraction, 71.9300 classification, and 17.3149 calibration.
 
-The fitted full-data integration evaluation scores 134.52/150
-(43.81 extraction, 72.83 classification, 17.87 calibration) with zero false
-approvals. I report that only as an end-to-end sanity check, not as evidence of
-generalization.
+I also evaluated a four-system research ensemble that reached about 140.86
+pooled locally with zero catastrophic false approvals. I did not submit it:
+running all four OCR pipelines was incompatible with the official average
+runtime limit, and cached ensemble outputs would not be a reproducible Docker
+solution. Two attempted one-pass learned distillations were rejected after
+losing score on the author holdouts.
 
-Tests cover the public evaluator/schema contract, white and off-page text
-rejection, multi-page field resolution, manual-note precedence, and stale
-packet policy. The fitted artifact is about 19 MB and the Docker image is about
-264 MB, both comfortably inside the published limits. The final rebuild passed
-a 20-packet read-only, network-disabled smoke at about 3.2 seconds per PDF
-without nested parallelism or runtime warnings.
+The submitted image is about 287 MB and contains about 14.2 MB of model
+artifacts, below the published image, per-model, and aggregate-model limits.
+The retained upstream validation run completed all 5,000 PDFs in 6 h 36 m 46 s
+(4.761 s/PDF) with four CPUs. I rebuilt the source in my solution repository
+and confirmed byte-identical output against the audited image on a
+network-disabled, read-only smoke case before generating this file. The
+submitted JSONL has SHA-256
+`08ba6fb615129dccd78ce29025d8d3945b7bea1b1e5bec4a0093fb8e7ec8e71f`;
+the solution repository includes a machine-readable generation receipt.
 
 ## Known failure modes
 
-- Severe scan damage can destroy an arbitrary sponsor ID, date, or applicant
-  name. The system uses a schema-valid unknown fallback and lowers confidence,
-  but exact extraction credit is still lost.
-- Rare risk classes (`memory_tampering` and `active_warrant`) have few public
-  examples. Rules protect high-precision visible hits; learned field models
-  never invent a risk flag when its evidence is absent.
-- Multi-applicant packets remain difficult when the active form's case header
-  is itself destroyed. Document precedence helps, but I do not claim perfect
-  entity resolution.
-- OCR behavior changes slightly across operating systems even with near-matched
-  Tesseract versions. The final Debian image uses Tesseract 5.5.0, is tested
-  under the exact contract, and character n-grams reduce sensitivity to those
-  changes.
-- The public manual is intentionally incomplete. I inferred only stable,
-  repeated sponsor and stale-packet behavior; ambiguous cases are routed to
-  review rather than accumulating case-specific exceptions.
+- When decisive visible evidence is physically absent, the resolver sometimes
+  makes a score-optimal bet instead of preserving review. On the public
+  full-set audit this improved average score but increased catastrophic false
+  approvals to 12. This is the main private-set risk.
+- Severe scan damage can still destroy an arbitrary name, date, or sponsor ID.
+- The compact OCR correction transducer did not generalize on a sealed split
+  and therefore ships disabled.
+- Authority resolution remains hardest when a damaged manual correction and a
+  clean lower-authority field disagree.
+- The public generator may not perfectly represent the private template and
+  damage distribution, so the local score should not be read as a guarantee.
 
 ## With another week
 
-I would train inside the final Linux image from the start, add coordinate-aware
-OCR for the fixed form fields, and put blend and field-threshold selection
-inside a fully nested outer audit. I would also add a small image-quality model
-for illegible biometrics, because raster damage is sometimes more informative
-than OCR text. Finally, I would profile fallbacks by damage type and spend the
-recovered runtime on a second OCR pass only where held-out expected value is
-positive.
+I would add a direct visual keyword spotter for decision-bearing crops, trained
+only on synthetic fonts and unlabeled visible crops, to recover damaged
+`APPROVED`/`DENIED` evidence without full transcription. I would also build a
+typed candidate ledger with pairwise source-aware ranking and
+conflict-conditioned uncertainty. Both would remain behind group-disjoint
+acceptance gates, a zero-new-false-approval requirement, and measured CPU
+budgets.
