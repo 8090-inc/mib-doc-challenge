@@ -36,6 +36,9 @@ artifact is missing the overlay is a no-op and the rule decision stands.
 """
 import json
 import os
+import re
+
+import vocab
 
 _ARTIFACT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                          "ev_weights.json")
@@ -63,6 +66,112 @@ def _ev(probs):
     return {a: sum(PAYOFF[a][t] * probs[t] for t in CLASSES) for a in CLASSES}
 
 
+# ---------------------------------------------------------------------------
+# Identity-free structural features for the within-path review resolver.
+# Nothing here derives from names, sponsor digits, case ids, or file paths --
+# only evidence quality, page composition, enum values and rule state.
+# ---------------------------------------------------------------------------
+
+_AUX_KEYS = (
+    "positive_clean_flags", "uncertain_flags", "illegible_page",
+    "damaged_key", "has_fee_page", "fee_page_read", "sponsor_id_trusted",
+    "sponsor_corroborated", "home_world_trusted", "registry_clear",
+    "registry_embargo", "note_sample", "note_rescinded", "waiver_confirmed",
+    "flags_candidate_present", "flags_source_ocr", "sponsor_revoked_signal",
+    "has_b13_page", "has_registry_page", "has_i8090_page",
+)
+_FIELD_KEYS = ("applicant_name", "species_code", "home_world", "visa_class",
+               "sponsor_id", "arrival_date", "declared_purpose",
+               "fee_status", "risk_flags")
+
+
+def _days_from_ref(arrival, ref):
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", (arrival or "").strip())
+    if not m or ref is None:
+        return 0.0
+    try:
+        import datetime as _dt
+        d = _dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        return float((ref - d).days)
+    except ValueError:
+        return 0.0
+
+
+def featurize(fields, aux, cands, rule_reason, ref):
+    """Fixed-order numeric vector; see FEATURE_NAMES for the layout."""
+    f = []
+    visa = fields.get("visa_class", "")
+    for v in vocab.VISA_CLASSES:
+        f.append(1.0 if visa == v else 0.0)
+    f.append(1.0 if not visa else 0.0)
+    fee = fields.get("fee_status", "")
+    for v in vocab.FEE_STATUSES:
+        f.append(1.0 if fee == v else 0.0)
+    f.append(1.0 if not fee else 0.0)
+    rf = fields.get("risk_flags", "")
+    flags = set(rf.split("|")) if rf and rf != "none" else set()
+    for fl in vocab.RISK_FLAGS:
+        f.append(1.0 if fl in flags else 0.0)
+    f.append(float(len(flags)))
+    f.append(1.0 if rf == "none" else 0.0)
+    for key in _AUX_KEYS:
+        f.append(1.0 if aux.get(key) else 0.0)
+    f.append(float(aux.get("n_ocr_pages") or 0))
+    f.append(float(aux.get("n_unknown_pages") or 0))
+    f.append(float(aux.get("n_pages") or 0))
+    forms = {ft for lst in cands.values() for (_v, ft, _o) in lst}
+    for ft in ("I8090", "B13", "FEE", "SPONSOR", "REGISTRY", "NOTE"):
+        f.append(1.0 if ft in forms else 0.0)
+    for key in _FIELD_KEYS:
+        f.append(1.0 if fields.get(key) else 0.0)
+        f.append(float(min(len(cands.get(key, [])), 6)))
+    days = _days_from_ref(fields.get("arrival_date", ""), ref)
+    f.append(days / 365.0)
+    f.append(1.0 if days > 180 else 0.0)
+    f.append(1.0 if not fields.get("arrival_date") else 0.0)
+    return f
+
+
+FEATURE_NAMES = (
+    [f"visa_{v}" for v in vocab.VISA_CLASSES] + ["visa_unknown"]
+    + [f"fee_{v}" for v in vocab.FEE_STATUSES] + ["fee_unresolved"]
+    + [f"flag_{fl}" for fl in vocab.RISK_FLAGS] + ["n_flags", "flags_none"]
+    + list(_AUX_KEYS)
+    + ["n_ocr_pages", "n_unknown_pages", "n_pages"]
+    + [f"page_{ft}" for ft in ("I8090", "B13", "FEE", "SPONSOR",
+                               "REGISTRY", "NOTE")]
+    + [x for key in _FIELD_KEYS for x in (f"has_{key}", f"pool_{key}")]
+    + ["days_from_ref", "stale", "arrival_missing"]
+)
+
+
+def forest_proba(forest, x):
+    """Average class distribution over exported decision trees.
+
+    Trees are trained with scikit-learn offline and exported to plain JSON
+    arrays; this walker (with the float32 feature cast matching sklearn's
+    internal representation) is the only runtime dependency.
+    """
+    import numpy as np
+    xv = np.asarray(x, dtype=np.float32)
+    acc = [0.0, 0.0, 0.0]
+    trees = forest["trees"]
+    for t in trees:
+        i = 0
+        feat, thr = t["feature"], t["threshold"]
+        left, right, val = t["left"], t["right"], t["value"]
+        while feat[i] >= 0:
+            i = left[i] if xv[feat[i]] <= thr[i] else right[i]
+        v = val[i]
+        s = sum(v) or 1.0
+        for j in range(3):
+            acc[j] += v[j] / s
+    n = float(len(trees)) or 1.0
+    # forest class order is (APPROVED, DENIED, NEEDS_REVIEW), asserted at
+    # export time by the trainer.
+    return {c: acc[j] / n for j, c in enumerate(CLASSES)}
+
+
 class EVModel:
     def __init__(self, artifact):
         self.tables = artifact["tables"]        # rule_key -> {class: p}
@@ -70,15 +179,32 @@ class EVModel:
         self.note_conf = float(artifact.get("note_conf", 0.99))
         self.conf_lo = float(artifact.get("conf_lo", 0.03))
         self.conf_hi = float(artifact.get("conf_hi", 0.99))
+        self.forest = artifact.get("forest")    # optional review resolver
 
     def probs_for(self, reason):
         return self.tables.get(rule_key(reason), self.prior)
 
-    def decide(self, rule_adj, rule_conf, rule_reason):
+    def decide(self, rule_adj, rule_conf, rule_reason,
+               fields=None, aux=None, cands=None, ref=None):
         rk = rule_key(rule_reason)
         if rk in _NOTE_KEYS:
             return rule_adj, round(self.note_conf, 3), rule_reason
         probs = self.probs_for(rule_reason)
+        # Within-path separation for the review-family paths: a small
+        # exported forest over identity-free structural features, blended
+        # with the path table.  Only ever consulted on the paths it was
+        # fitted for; falls back to the table alone when inputs are absent.
+        if (self.forest and rk in self.forest.get("paths", ())
+                and fields is not None):
+            try:
+                pf = forest_proba(
+                    self.forest,
+                    featurize(fields, aux or {}, cands or {},
+                              rule_reason, ref))
+                w = float(self.forest.get("blend", 0.65))
+                probs = {c: w * pf[c] + (1.0 - w) * probs[c] for c in CLASSES}
+            except Exception:
+                pass
         ev = _ev(probs)
         allowed = {"APPROVED": ("APPROVED", "NEEDS_REVIEW"),
                    "DENIED": ("DENIED", "NEEDS_REVIEW"),
@@ -109,9 +235,10 @@ def load():
     return _model
 
 
-def apply(rule_adj, rule_conf, rule_reason):
+def apply(rule_adj, rule_conf, rule_reason,
+          fields=None, aux=None, cands=None, ref=None):
     """EV overlay entry point; identity function when no artifact shipped."""
     m = load()
     if m is None:
         return rule_adj, rule_conf, rule_reason
-    return m.decide(rule_adj, rule_conf, rule_reason)
+    return m.decide(rule_adj, rule_conf, rule_reason, fields, aux, cands, ref)

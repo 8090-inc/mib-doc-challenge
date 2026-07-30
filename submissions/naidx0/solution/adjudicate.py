@@ -214,7 +214,8 @@ def adjudicate(fields, aux, cands, ref_date, use_embargo=False, ev=True):
     adj, conf, reason = _adjudicate_rules(fields, aux, cands, ref_date,
                                           use_embargo)
     if ev:
-        adj, conf, reason = evmodel.apply(adj, conf, reason)
+        adj, conf, reason = evmodel.apply(adj, conf, reason,
+                                          fields, aux, cands, ref_date)
     return adj, conf, reason
 
 
