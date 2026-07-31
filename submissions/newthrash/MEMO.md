@@ -144,6 +144,18 @@ this generator's damage cluster (thin vertical glyphs: e, i, l, r), but
 adding the measured pairs did not survive out-of-fold measurement. The tool
 and the finding remain in the repository; the change does not.
 
+**Constrained recognition was validated and still not shipped.** Pixel
+analysis of the corpus rasters shows why OCR fails them at any resolution:
+~144 DPI embedded JPEGs whose stroke width nears a third of x-height, merging
+adjacent glyphs into word-shaped blobs with nothing to segment. The
+check-reader remedy - correlate rendered, equally-degraded candidates against
+the cell - measured 8/40 recovered, 0 wrong on fee cells OCR had failed. It
+still reverted under the standing criteria: corpus-wide coverage was ~6 cells,
+and precision did not transfer to vocabularies whose candidates share a
+silhouette - the first smoke test matched DIP-1 against an XW-1 cell, a
+policy-critical wrong answer, and long-word fields lost their zero-wrong
+property. The recognizer remains in the repository with its numbers.
+
 ## With another week
 
 1. Resolve the applicant-name regression, then extend page-type precedence to
