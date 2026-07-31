@@ -1,7 +1,7 @@
 # MIB Doc Challenge — Technical Memo
 
 **Author:** Henry Gilbert (`henrygilbert22`)  
-**Solution commit:** `d2556b0` (Docker train scored on `215bc56`; later commits are docs/dead-code/import-structure only)  
+**Solution commit:** `81d46d1` (Docker train scored on `215bc56`; later commits are polish/import-structure only — same pipeline behavior)  
 **Official Docker train (iter-15):** 121.18 / 150 — classification 64.10, extraction 42.00, calibration 15.08, 11 CFAs  
 **Image / throughput:** 0.46 GiB, ~0.83–1.1 s/PDF (train with embedded-image OCR ~1.1 s/PDF)  
 **Validation:** 5,000 / 5,000 under iter-15 image (`predictions.jsonl`); score not reported (private labels)
