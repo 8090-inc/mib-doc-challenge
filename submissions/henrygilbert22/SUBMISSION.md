@@ -5,7 +5,7 @@
 | | |
 | --- | --- |
 | **URL** | https://github.com/henrygilbert22/mib-doc-challenge-solution |
-| **Status** | **Pending** — repo creation/push not confirmed. Working tree: `/home/henry/projects/mib-doc-challenge-work/mib-solution` |
+| **Status** | **Public** |
 | **Commit** | `81d46d1` (train Docker measured at `215bc56`) |
 
 ## Docker contract

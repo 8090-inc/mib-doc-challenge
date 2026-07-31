@@ -72,4 +72,4 @@ Local re-run (same commit, non-Docker): 121.34 / 150 — harness variance, same 
 
 ## Compliance
 
-No validation labels, no per-case hardcoding, no network/API/LLM at runtime. Sponsor revocation list includes train-inferred IDs (commented in source). Public solution-repo URL pending review.
+No validation labels, no per-case hardcoding, no network/API/LLM at runtime. Sponsor revocation list includes train-inferred IDs (commented in source). Solution repository: https://github.com/henrygilbert22/mib-doc-challenge-solution (`81d46d1`).
