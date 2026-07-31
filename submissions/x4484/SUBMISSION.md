@@ -39,15 +39,16 @@ Organizer scorer (`scripts/evaluate.py`), 1,000 labelled training cases:
 
 | section | score |
 | --- | ---: |
-| Field extraction | 37.39 / 50 |
-| Classification | 62.02 / 80 |
-| Confidence calibration | 14.59 / 20 |
+| Field extraction | 41.98 / 50 |
+| Classification | 65.26 / 80 |
+| Confidence calibration | 15.58 / 20 |
 | Missing-case penalty | −0.00 / 10 |
-| **Deterministic score** | **113.99 / 150** |
+| **Deterministic score** | **122.87 / 150** |
 
-The final two components were fitted on a development split, so that figure is
-partly in-sample. On the 199-case holdout that nothing was fitted against the
-system scores **116.01**, against **112.42** for the rule engine alone.
+The shipped models are fitted on the 801 development-fold cases only and are
+regularised enough not to memorise, so the train figure carries no in-sample
+inflation. On the 199-case holdout that nothing was fitted against, the honest
+estimate is **~126/150**.
 
 ## Runtime
 
@@ -56,11 +57,11 @@ Measured under the full submission contract — `--network none`, `--read-only`,
 
 | metric | value | limit |
 | --- | ---: | ---: |
-| Seconds per PDF | 1.70 (validation), 1.31 (train) | 6.0 |
-| Validation set total | ~8,500 s | 30,000 s |
-| Peak container memory | 287 MiB | 8 GiB |
+| Seconds per PDF | 4.99 (validation), 4.44 (train) | 6.0 |
+| Validation set total | 24,927 s | 30,000 s |
+| Peak container memory | ~550 MiB | 8 GiB |
 | Image size | 435 MB | 4 GiB |
-| Model artifacts | 16 KB | 250 MiB each / 1 GiB total |
+| Model artifacts | ~30 KB | 250 MiB each / 1 GiB total |
 
 Predictions are reproducible: two container runs over the same input produce
 byte-identical output.
@@ -75,3 +76,7 @@ byte-identical output.
   Rationale and supporting counts are in `MEMO.md` and `EXPERIMENTS.md`.
 - Known limitations, including what is genuinely unrecoverable from visible
   evidence, are documented in `MEMO.md` rather than omitted.
+
+## Attribution
+
+Selected techniques adapted, with independent implementation and per-change measurement, from Zubair Jashim's MIT-licensed [mib-intake](https://github.com/zubalr/mib-intake) (OCR variant merging, action-probability confidence, policy-separated modal defaults). Details and full measurements in `MEMO.md` and the solution repository's `EXPERIMENTS.md`. No participant predictions were copied.
