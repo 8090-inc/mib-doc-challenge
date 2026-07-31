@@ -44,4 +44,4 @@ A Reason-line ROI extension of the note reader for rasterized adjudicator notes 
 
 ## A note on the author
 
-I'm a practicing surgeon, not a coder — this entry was my experiment in what agentic coding can do.
+I'm a practicing surgeon, not a coder, and I don't understand this codebase at the line level. This entry was my experiment in what agentic coding can do: my contribution was direction — prompting the AI to hunt for the traps hidden in the packets, to research established document-reading and computer-vision techniques rather than invent its own, and to measure every idea against held-out data before keeping it. The engineering is the AI's; the skepticism and the decisions were mine.
