@@ -14,3 +14,8 @@ data/train/
 data/validation/
 *.zip
 *.zip.sha256
+
+# Derived OCR/extraction cache used by tools/replay.py (rebuildable).
+*.pkl
+*.shards/
+venv/
