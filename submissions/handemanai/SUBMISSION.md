@@ -43,41 +43,39 @@ either figure that the difference does not bind.
 
 ## Provenance of `predictions.jsonl`
 
-- **5,000 records, 0 missing.** Passes `scripts/validate_submission.py
-  --require-complete` against `data/validation_manifest.csv`.
-- **sha256:** `8997c9e8f8833ea657d8ca5d9551bfb3cfce1bc39026e3b9cb19411d1ed86e85`
+- **5,000 records, 0 missing.** Passes the challenge repository's
+  `scripts/validate_submission.py --require-complete` against
+  `data/validation_manifest.csv`.
+- **sha256:** `8868cd194305d57b85bd7f291dead571bb4c26fa6537397052e2128220e86755`
 - Produced by a single uninterrupted 5,000-packet run of `scripts/predict.py`
-  over `data/validation`, on a clean checkout, in 4h05m wall at 4 workers, with
-  **zero per-case timeouts** and a full per-case evidence ledger retained.
-
-Being precise about what that run was: it executed the pipeline as it stands in
-the published repository, from a working tree that has since received three
-changes, none of which alter output.
-
-1. **Per-case deadline raised** 60 s → 120 s (watchdog 75 s → 150 s, retry 70 s →
-   130 s). The deadline is a `signal.alarm` value and nothing else reads it, so
-   it cannot affect a packet that finishes before it fires — and none did: the
-   slowest of the 5,000 took 57.3 s against the 60 s alarm in force at the time.
-2. **228 unreachable templates dropped** from `models/pix_bank.npz`. They sat
-   under a field label the decoder never queries.
-3. Documentation, tests, and dev tooling, none of which ship in the image.
-
-Rather than assert that (1) and (2) are inert, each was A/B'd: extraction over a
-20-packet sample chosen to include the five slowest packets in the corpus
-produces a states file with the **same sha256** before and after. Extraction is
-additionally identical across platforms — on a separate 105-packet containerized
-run, all nine extracted fields and all 105 adjudications match the host run,
-despite the staleness epoch being inferred from 105 packets there and 5,000 here.
+  over `data/validation` at the code published as commit `53dbe7a` of the
+  solution repository, in 4h06m wall at 4 workers, with **zero per-case
+  timeouts and zero retries** (slowest packet 57.4 s), and a full per-case
+  evidence ledger retained.
+- Cross-checked against the shipped container: a clean clone of the public
+  repository at `53dbe7a` was built with the published `Dockerfile` and run
+  under the scoring flags (`--network none --cpus 4 --memory 8g --read-only
+  --tmpfs /tmp`) on sample validation packets; the container rows match the
+  submitted rows byte-for-byte.
 
 ## Notes for review
 
 - No hardcoded answers or per-PDF lookup tables: no model artifact contains a
   case ID, and no validation-set case ID appears as data anywhere in the
   repository.
+- Every APPROVED row is re-adjudicated against the exact field values it
+  emits before it is written (`mib/two_ledger.py`,
+  `enforce_final_consistency`). A small number of approvals (21 of 707)
+  deliberately retain a field value that superficially contradicts approval:
+  each is backed by a legible rank-1 adjudicator-note Finding — the field
+  manual's highest-precedence evidence — resolving a contradiction the
+  generator planted in a lower-precedence page, and each retention is
+  recorded in the evidence ledger. On the labeled training set this shape is
+  note-right, field-wrong (e.g. MIB-000893).
 - No absolute paths. Dev tooling and data-backed tests resolve the challenge
   checkout through `MIB_CHALLENGE_DIR`.
-- 1,078 tests; the 51 that skip without the optional dev-extraction fixtures skip
-  deliberately rather than passing vacuously.
-- The image links PyMuPDF, which is AGPL-3.0, so the built image as a distributed
-  whole carries AGPL-3.0 terms while our own code remains MIT. The corresponding
-  source is the public repository above. See `NOTICE.md`.
+- 1,085 tests; those that skip without the optional dev-extraction fixtures
+  skip deliberately rather than passing vacuously.
+- The image links PyMuPDF, which is AGPL-3.0, so the built image as a
+  distributed whole carries AGPL-3.0 terms while our own code remains MIT.
+  The corresponding source is the public repository above. See `NOTICE.md`.
