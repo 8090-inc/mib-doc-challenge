@@ -34,9 +34,9 @@ We authored a red-team corpus of every injection vector the specification names 
 
 The larger residual is structural absence, and it is not a failure. In the biggest hedge slice, 110 of 122 packets contain no flags evidence anywhere — no biometric slip, no flags line on any page, provable from the text layer on digital packets. The generator withholds decisive evidence and randomizes the truth behind it, so NEEDS_REVIEW is the *designed* correct adjudication — the organizers confirmed exactly this on such packets (challenge issue #5: "These examples are under-determined and NEEDS_REVIEW is the correct output"): a human officer holding that packet would escalate it. Converting those cases means betting on generator priors instead of reading. We measured the bets — approving all fee-unread-only cases is +0.94 dev at two or three systematic false approvals — and declined them, leaving the mechanisms behind default-off flags because that trade-off belongs to a human.
 
-## About this entry
+## A note on the author
 
-I'm a practicing surgeon who entered this challenge to explore the capabilities of agentic coding: the code was written by LLM agents working under my direction.
+I'm a practicing surgeon, not a coder — this entry was my experiment in what agentic coding can do.
 
 ## With another week
 
