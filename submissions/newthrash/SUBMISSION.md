@@ -22,16 +22,16 @@ Verified end to end with the organizers' own harness,
 | Check | Limit | Measured |
 | --- | --- | --- |
 | Image size | 4 GiB | 0.15 GiB |
-| Runtime | 6 s/PDF | 0.95 s/PDF |
+| Runtime | 6 s/PDF | ~5 s/PDF in-container incl. engine warm-up |
 | Model artifacts | 1 GiB total | none |
 | Structural validity | — | 1000/1000 rows, 0 missing/extra/duplicate/invalid |
 
-Public training score from `scripts/evaluate.py`: **118.44 / 150**
-(extraction 41.63, classification 60.93, calibration 15.89), 1 catastrophic
+Public training score from `scripts/evaluate.py`: **120.36 / 150**
+(extraction 42.49, classification 61.90, calibration 15.96), 1 catastrophic
 false approval.
 
 The honest estimate for unseen packets is the five-fold out-of-fold total,
-**116.82 / 150**, where every held-out case is scored by a calibration table
+**118.53 / 150**, where every held-out case is scored by a calibration table
 fitted without it. `MEMO.md` reports both and explains the gap.
 
 No LLM, VLM, network access, model artifacts or API keys at runtime. No

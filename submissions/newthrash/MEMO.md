@@ -7,10 +7,10 @@ through `run_docker_submission.py` under the published contract.
 
 | | Training set | Out of fold |
 | --- | ---: | ---: |
-| Field extraction | 42.32 / 50 | 42.32 / 50 |
-| Classification | 61.13 / 80 | — |
-| Calibration | 15.90 / 20 | — |
-| **Total** | **119.34 / 150** | **117.98 / 150** |
+| Field extraction | 42.49 / 50 | 42.49 / 50 |
+| Classification | 61.90 / 80 | — |
+| Calibration | 15.96 / 20 | — |
+| **Total** | **120.36 / 150** | **118.53 / 150** |
 | Catastrophic false approvals | 1 | 1 |
 
 The out-of-fold column is the number I would bet on. Each held-out packet is
@@ -18,7 +18,8 @@ scored by a calibration table fitted without it, across five folds. The
 training column is in-sample and optimistic; I report both because the gap is
 the part most easily mistaken for progress.
 
-Runtime 1.16 s/PDF against a 6 s budget, image 0.15 GiB against 4 GiB, 1000/1000
+Runtime under 2 s/PDF locally and ~5 s/PDF in-container including engine
+warm-up, against a 6 s budget, image 0.15 GiB against 4 GiB, 1000/1000
 structurally valid rows, no missing, extra, duplicate or invalid records.
 
 ## Approach
@@ -36,6 +37,17 @@ exact and free where present; OCR (Tesseract, PSM 3 primary) covers the rest wit
 a bounded escalation ladder — contrast stretch, then a 300 DPI pass, then a
 rotation probe — each rung gated on whether form anchors were actually recovered,
 so clean pages pay one pass.
+
+**Two engines, two trust envelopes.** A third of the raster pages embed ~144 DPI
+JPEGs whose strokes run three times too thick for their glyph size: characters
+merge into blobs that segment-then-classify OCR cannot separate at any
+resolution. PP-OCR's CNN recognizes whole lines without segmentation and reads
+many of these pages — 'FeeStatus:paid' where Tesseract returned only the page
+footer. Its noisy reads of open-form values snap into wrong-but-valid strings,
+though (wrong applicant names doubled in the first integration), so
+second-engine text feeds only closed-vocabulary fields, where snapping filters
+noise. The engine's models ship inside the wheel and were verified to load with
+networking disabled.
 
 **Adjudicator stamps are vector graphics, not ink.** `page.get_drawings()` reads
 them exactly: no rasterization, no threshold to tune. On public training data a
@@ -155,6 +167,15 @@ and precision did not transfer to vocabularies whose candidates share a
 silhouette - the first smoke test matched DIP-1 against an XW-1 cell, a
 policy-critical wrong answer, and long-word fields lost their zero-wrong
 property. The recognizer remains in the repository with its numbers.
+
+**The container is part of the system.** After adding the second engine, the
+rebuilt image produced structurally valid output for 25 packets in 3.3 seconds
+— the only tell that OCR never ran. Its opencv dependency needed libGL, absent
+from slim images; the import failed, and the same per-page error isolation
+that protects a batch from one corrupt PDF swallowed the failure silently.
+Local measurements were all valid; only the offline contract test exposed it.
+Robustness features hide infrastructure failures, so the contract test is not
+optional.
 
 ## With another week
 
