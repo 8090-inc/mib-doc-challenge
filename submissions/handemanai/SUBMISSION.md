@@ -16,7 +16,7 @@ model artifact.
 
 ```bash
 docker build -t mib-submission .
-docker run --rm --network none \
+docker run --rm --network none --cpus 4 --memory 8g --read-only --tmpfs /tmp \
   --mount type=bind,src=/path/to/pdfs,dst=/input,readonly \
   --mount type=bind,src=/path/to/output,dst=/output \
   mib-submission /input /output/predictions.jsonl
@@ -58,11 +58,25 @@ either figure that the difference does not bind.
   --tmpfs /tmp`) on sample validation packets; the container rows match the
   submitted rows byte-for-byte.
 
+## Documentation-only commits after `53dbe7a`
+
+The submitted `predictions.jsonl` was generated at commit `53dbe7a` of the
+solution repository. Every commit after `53dbe7a` touches documentation and
+experiment receipts only — nothing under `mib/`, `scripts/`, `models/`,
+`tests/`, `tools/`, `Dockerfile`, or `run.sh` changes, verifiable with
+`git diff 53dbe7a..HEAD -- mib scripts models tests tools Dockerfile run.sh`
+(empty output), so a rebuild at any later commit reproduces the same rows.
+
 ## Notes for review
 
 - No hardcoded answers or per-PDF lookup tables: no model artifact contains a
-  case ID, and no validation-set case ID appears as data anywhere in the
-  repository.
+  case ID, and no validation-set case ID is used as data by the runtime or any
+  artifact. (A grep for `MIB-1` in the solution repository finds exactly two
+  incidental mentions, neither reachable from the prediction path: the
+  synthetic negative-test fixture string `Packet MIB-100809 / page 2` in
+  `tests/test_fee_amount_indicator.py`, which asserts that ID fragments can
+  never match the fee-amount pattern, and the injection-census example
+  MIB-102051 discussed in `docs/REVIEWER_GUIDE.md`.)
 - Every APPROVED row is re-adjudicated against the exact field values it
   emits before it is written (`mib/two_ledger.py`,
   `enforce_final_consistency`). A small number of approvals (21 of 707)
