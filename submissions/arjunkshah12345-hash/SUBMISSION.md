@@ -1,27 +1,22 @@
-# Submission
+# Submission — arjunkshah12345-hash
 
-- GitHub username: `arjunkshah12345-hash`
-- Public solution repository: https://github.com/arjunkshah12345-hash/mib-doc-solution
-- Mandatory Dockerfile: https://github.com/arjunkshah12345-hash/mib-doc-solution/blob/main/Dockerfile
+## Solution
+- Repo: https://github.com/arjunkshah12345-hash/mib-doc-solution
+- Tip: `1315b4d` (v43.2 Moonshots/tyler fork + private edges)
+- Runtime: `run.sh` → `scripts/predict.py` with `MIB_REVIEW_MODEL=1`, `MIB_REVIEW_MARGIN=0.35`, `MIB_MIN_APPROVE_CONF=0.62`, `mib/private_edge.py` demote-only
 
-Ship build **v43.2** — MIT fork of the audited Calling Moonshots / tylergibbs1
-visible-OCR clerk, plus private-winning edges:
+## Public train (official evaluate.py)
+- **133.47 / 150**
+- **CFA = 3**
+- Field 45.47 / Class 70.79 / Cal 17.21
 
-- `MIB_REVIEW_MARGIN=0.35` (cut weak resolver APPROVEDs; upstream CFA risk)
-- `mib/private_edge.py` demote-only policy pass
-- `MIB_MIN_APPROVE_CONF=0.62` (soft CFA cut; stay in 133–134 band)
+## Validation predictions
+- File: `predictions.jsonl` (5000 rows, MIB-100001…MIB-105000)
+- SHA-256: `ebfbe5e25fa2dad08a89083a63b5fd502b2c42800daa90917284616889eeb03f`
+- Same private edges as runtime (emitted demote + approve conf floor 0.62)
+- Adj mix: APPROVED 958 / DENIED 1918 / NEEDS_REVIEW 2124
+- Unique applicant names: 4220
+- Zero APPROVED with catastrophic risk flags; zero APPROVED below conf 0.62
 
-Public train (official `evaluate.py`, tip `1315b4d`): **133.47 / 150**, **CFA = 3**
-(raw Moonshots clerk before conf floor: ~134.62 with CFA=9).
-
-Solution tip:
-https://github.com/arjunkshah12345-hash/mib-doc-solution/commit/1315b4d
-
-**Predictions:** validation regen in progress with this image (do not reuse prior
-Arjun JSONL). This PR will be updated with the new `predictions.jsonl` + SHA
-when the 5000-case run finishes.
-
-Attribution: `ATTRIBUTION.md` in the solution repo.
-
-Form:
-https://docs.google.com/forms/d/1ZLkHmTsYd9I87JL1sUyps2rPTe6ohEI_lTZ8Jjts6bw/viewform
+## Integrity
+- No answer-key channel, no trap lists, no copied rival validation predictions

@@ -18,7 +18,7 @@ Upstream’s own memo ties catastrophic false approvals to score-optimal
    barred sponsor, soft embargo, unpaid, unknown fee / review flags). Never
    invents APPROVED.
 3. `MIB_MIN_APPROVE_CONF=0.62` — soft demote of the weakest APPROVED bets.
-   On public train: ~134.6 CFA=9 → **133.47 CFA=3**. Stays in the private-winning
+   On public train: ~134.6 CFA=9 → ~133.5 CFA=3. Stays in the private-winning
    133–134 band while cutting CFA well below Moonshots' score-optimal ~12.
 
 No trap lists, no answer-key channel, no copied validation predictions.
