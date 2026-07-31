@@ -1,100 +1,73 @@
 # MIB Doc Challenge — Technical Memo
 
 **Author:** Henry Gilbert (`henrygilbert22`)  
-**Solution:** offline PyMuPDF + selective Tesseract pipeline with rule-based adjudication  
-**Measured train score (iter-15, official Docker harness):** 121.18 / 150 — classification 64.1, extraction 42.0, calibration 15.08, 11 catastrophic false approvals, ~0.83 s/PDF, 0.46 GiB image. Solution commit `215bc56`. Validation score not reported (private labels); `predictions.jsonl` is the complete iter-15 Docker validation run (5,000/5,000).
+**Solution commit:** `215bc56`  
+**Official Docker train (iter-15):** 121.18 / 150 — classification 64.10, extraction 42.00, calibration 15.08, 11 CFAs  
+**Image / throughput:** 0.46 GiB, ~0.83–1.1 s/PDF (train Docker ~1 s/PDF with embedded-image OCR; pre-embed runs were ~0.83)  
+**Validation:** 5,000 / 5,000 under iter-15 image (`predictions.jsonl`); score not reported (private labels)
 
 ---
 
-## Problem framing
+## Problem
 
-Each case is a multi-page PDF packet mixing intake forms, biometrics, registry extracts, fee receipts, and adjudicator notes. The challenge requires extracting nine fields plus pipe-delimited risk flags, assigning one of three adjudication outcomes, and emitting a confidence score calibrated to correctness — all **offline** under strict Docker limits (4 vCPU, 8 GiB, no network, ≤6 s/PDF average).
+Each case is a multi-page PDF: intake forms, biometrics, registry extracts, fee receipts, adjudicator notes. Output nine fields, pipe-delimited risk flags, one adjudication outcome, and a confidence score — all offline (4 vCPU, 8 GiB, no network, ≤6 s/PDF mean).
 
-The FIELD_MANUAL defines a **visible-evidence trust model**: adjudicator stamps and manual notes outrank intake forms, which outrank biometrics, sponsor attestations, registry extracts, and finally machine-readable text. Hidden white text, off-page spans, fake answer keys, and barcode prompt injection are explicitly untrusted.
-
----
-
-## Architecture: native-first, selective OCR
-
-**Evidence channel.** Pages are rendered at 150 DPI only when OCR is needed. PyMuPDF extracts native spans with bbox, color, opacity, and render-mode metadata. Spans failing visibility checks (near-white RGB ≥0.92, opacity <0.25, <85% bbox on page, render mode 3, semantic trap lines) are discarded before parsing or adjudication.
-
-**Selective OCR routing.** After a cheap native pass, the pipeline classifies each page (intake, biometric, registry, fee receipt, adjudication, etc.). OCR runs on at most six pages per packet, prioritized by missing role fields and scan sparsity. A lightweight 100 DPI routing probe (PSM 11, 2 s cap) re-types ambiguous scan pages. Fee receipts get a dedicated autocontrast retry when `fee_status` remains missing.
-
-**Field fusion.** `field_parser.py` combines stacked-label regex (form-style vertical labels), inline patterns, manual-correction overrides, and page-type precedence tables mirroring the FIELD_MANUAL hierarchy. Cross-page consistency checks infer `identity_conflict` and `sponsor_mismatch` without trusting hidden native alone.
-
-**Adjudication.** `adjudicator.py` applies deterministic policy: disqualifying flags → deny; `TRANSIT-7` work denial; revoked sponsors (public manual + **train-inferred** extras in `REVOKED_SPONSORS`, not case lookups); fee/unpaid/waiver rules; 180-day stale arrival (receipt date 2026-07-22); visible manual findings; stamp logic with sample-denial watermark and rescinded-denial handling; multi review-flag escalation. Contradictions or hidden native presence default to `NEEDS_REVIEW` unless a visible denial path is already established.
-
-**OCR post-processing.** `vocab_correct.py` applies closed-vocabulary correction with confusion-weighted single-character edits on OCR-sourced text only (never native spans). Illegible biometric pages get a dual-stem OCR recovery pass when primary routing leaves `biometric_id` or `risk_flags` empty.
-
-**Confidence.** `confidence.py` maps evidence quality (field completeness, mean OCR confidence, native–OCR corroboration, hidden-text and contradiction penalties) onto `[0.01, 0.99]`, with reason-code caps and principled dual-view dampening when native and OCR disagree on high-stakes fields. Train-fitted per-case lookup calibration was explicitly rejected as overfit-prone; all caps are rule-derived from evidence quality, not label lookup tables.
+The FIELD_MANUAL defines visible-evidence precedence: adjudicator stamps and manual notes beat intake, which beats biometrics, sponsor attestations, registry, then machine text. Hidden white text, off-page spans, fake keys, and barcode injection are untrusted.
 
 ---
 
-## OCR engine research & selection
+## Pipeline
 
-We benchmarked engines in isolated `ocr-bench/` on a stratified 60-case train slice including hidden-text traps (`EXP-OCR-001/002`).
+1. **Native extract** — PyMuPDF spans with bbox, color, opacity, render mode. Drop near-white (RGB ≥0.92), low opacity (<0.25), off-page (<85% bbox), render-mode-3, and semantic trap lines before parsing or policy.
 
-| Candidate | Outcome |
+2. **Selective OCR** — Page-type routing after a cheap native pass. Tesseract PSM 11 @ 150 DPI on at most six pages per packet, prioritized by missing role fields and scan sparsity. 100 DPI routing probe (PSM 11, 2 s cap) for ambiguous scans. Fee receipts get autocontrast retry when `fee_status` stays empty.
+
+3. **Embedded-image OCR** — Separate pass on passport/registry raster blocks when visa class (TRANSIT-7) or species/home-world remain unknown after page OCR. Targets graphic-only fields, not full-document OCR.
+
+4. **Field fusion** — Stacked-label regex, inline patterns, manual-correction overrides, page-type precedence from the FIELD_MANUAL. Cross-page checks infer `identity_conflict` and `sponsor_mismatch`.
+
+5. **Closed-vocab correction** — `vocab_correct.py`: confusion-weighted single-character edits on OCR text only; native spans untouched.
+
+6. **Adjudication** — Deterministic rules in `adjudicator.py`: disqualifying flags → deny; TRANSIT-7 work denial; revoked sponsors; fee/unpaid/waiver; 180-day stale arrival (receipt 2026-07-22); visible manual findings; stamp logic (sample-denial watermark, rescinded denial); multi review-flag escalation. Contradictions or hidden native → `NEEDS_REVIEW` unless a visible denial path exists.
+
+7. **Confidence** — Heuristic in `confidence.py`: field completeness, mean OCR confidence, native–OCR corroboration, hidden-text and contradiction penalties, reason-code caps, dual-view dampening when native and OCR disagree on high-stakes fields. Mapped to `[0.01, 0.99]`. No train-fitted lookup table.
+
+**OCR engine:** Tesseract PSM 11 @ 150 DPI (0% hidden-text leak on bench slice, inside 6 s mean/p95 after selective routing). RapidOCR runner-up but p95 >6 s. Marker/Docling/Surya rejected on image size and CPU latency. Raw PyMuPDF native rejected (100% hidden-text leak).
+
+---
+
+## Rejected (and why)
+
+| Idea | Why not |
 | --- | --- |
-| **Tesseract PSM 11 @ 150 DPI** | **Adopted** — 0% hidden-text leak; 2.45 s mean / 4.08 s p95 per PDF on sample; 46.7% weighted field recovery (best among configs meeting 6 s mean **and** p95) |
-| Tesseract PSM 6 @ 150 DPI | 95 s mean — fails runtime gate |
-| Tesseract PSM 3 @ 150 DPI | 67 s p95 — fails runtime gate |
-| RapidOCR ONNX @ 150 DPI | 0% leak, 6.45 s mean / 11.5 s p95 — misses p95 gate; runner-up |
-| PyMuPDF filtered native (no OCR) | Safe but insufficient recall alone |
-| PyMuPDF raw native | 100% hidden-text leak — rejected |
-| **Marker, Docling, Surya** | Rejected without full bench — bundled model stacks and CPU latency exceed 4 GiB image / 6 s/PDF budgets (`CONTRACT-SIZE`, `CONTRACT-TIMEOUT`) |
-| **LiteParse / LlamaParse-class** | Considered for layout/table quality; **disallowed at runtime** (network, API keys). Useful ideas (reading order, table bbox heuristics) were reimplemented offline in page classification and stacked-field parsing |
-
-PSM 11 (sparse text) outperformed PSM 6 (uniform block) on form scans with isolated labels while staying inside runtime gates after selective page filtering — the production config in `constants.py`.
+| Train-fitted lookup calibrator | Per-case confidence caps from public labels; overfit on re-score |
+| Fee imputation driving adjudication | Train lookup on `(visa, fee, risk_evidence)` tuples; adjudication must use extracted evidence, not imputed fee |
+| Page-presence CFA gates (e.g. no biometric page → force review) | Fixes ~5/11 CFAs on train but flips ~14 truth-APPROVED packets; net −0.4 classification pts |
+| ARCHIVE overlay (COPY/FILED/ARCHIVE + lone `7` → TRANSIT-7) | Fires on one train case (MIB-000865); case-specific hack |
+| Full-document OCR / heavyweight layout models | Contract size and latency |
 
 ---
 
-## Adversarial defenses
-
-- Filter semantic trap lines before any field or policy use.
-- Never adjudicate from uncorroborated native text on OCR'd pages.
-- Ignore sample-denial watermarks; require rescission context before treating crossed-out denials as benign.
-- Reject barcode/SYSTEM injection strings at text-ingest.
-- Unit tests (`test_adversarial.py`) cover near-white hidden answers, off-page text, and trap-line stripping.
-- Hidden-span rejection is counted and penalizes confidence; contradictions force review unless a visible denial reason already applies.
-
----
-
-## Empirical results (train, official harness)
-
-**Iteration 15 full train** (official Docker, solution commit `215bc56`):
+## Results (train, official Docker harness)
 
 | Section | Score |
 | --- | ---: |
 | Total | **121.18** / 150 |
-| Classification | 64.1 / 80 |
-| Extraction | 42.0 / 50 |
+| Classification | 64.10 / 80 |
+| Extraction | 42.00 / 50 |
 | Calibration | 15.08 / 20 |
-| Missing penalty | 0.00 |
+| CFAs | 11 |
 
-Runtime: **~833 s** wall / 1,000 PDFs (**~0.83 s/PDF**), image **0.46 GiB**. All 1,000 train cases predicted; schema valid.
+Local re-run (same commit, non-Docker): 121.34 / 150 — harness variance, same 11 CFAs.
 
-Local re-run (same commit, non-Docker): 120.95 / 150 — classification 64.04, extraction 42.0, calibration 15.14, 11 CFAs (within harness variance).
+**Climb:** iter-12 Docker 120.27 → iter-15 121.18 (+0.91). Holdout gate (`case_id % 5 == 0`): adopted embedded-image species recovery at +0.30 total vs prior baseline; full-train CFAs unchanged at 11.
 
-**Progression:** iter-12 Docker baseline 120.27 → iter-15 **121.18** (+0.60). Holdout gate (20%, `case_id % 5 == 0`): adopted +0.30 total vs prior; CFAs flat at 2 on holdout slice.
+**Residual CFAs (11):** Mostly truncated packets missing biometric/registry graphic pages, or disqualifying flags present in truth but not in visible registry/OCR text. Not parser bypasses on complete packets. Example: MIB-000865 has biometrics but TRANSIT-7 misread — not fixable by page-count gates.
 
-**Failure modes (iter-15):**
-
-1. **Catastrophic false approvals (11):** residual cases are truncated packets or missing biometric/registry graphic evidence — not parser bypasses on clean packets.
-2. **Fee status:** OCR/normalization on degraded fee receipts remains the largest extraction gap.
-3. **Over-review:** conservative missing-evidence and dual-view dampening still inflate `APPROVED→NEEDS_REVIEW`.
+**Other gaps:** Degraded fee-receipt OCR; conservative missing-evidence and dual-view dampening still push `APPROVED → NEEDS_REVIEW`.
 
 ---
 
-## Next improvements
+## Compliance
 
-1. **Truncated-packet CFAs:** detect incomplete biometric/registry page sets and force review/deny when graphic evidence is structurally absent.
-2. **Fee receipt channel:** expand fuzzy label patterns and second-pass OCR variants without full-document OCR.
-3. **Risk-flag sensitivity:** tighten approval when partial flag prose or registry `EMBARGO REVIEW` appears without full `Observed flags:` parse.
-4. **Applicant-name / sponsor OCR:** largest remaining extraction gaps after risk_flags; keep dual-view gates so trap unfiltering stays off-limits.
-
----
-
-## Compliance statement
-
-No validation labels, no per-case hardcoding, no network/API/LLM usage at runtime. Sponsor revocation list includes train-inferred IDs disclosed in source comments. Validation `predictions.jsonl` matches the iter-15 Docker run (5,000/5,000, schema-valid). Public solution-repo publication **pending Henry review**.
+No validation labels, no per-case hardcoding, no network/API/LLM at runtime. Sponsor revocation list includes train-inferred IDs (commented in source). Public solution-repo URL pending review.
