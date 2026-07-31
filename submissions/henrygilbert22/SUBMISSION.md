@@ -6,7 +6,7 @@
 | --- | --- |
 | **URL** | https://github.com/henrygilbert22/mib-doc-challenge-solution |
 | **Status** | **Pending** — repo creation/push not confirmed. Working tree: `/home/henry/projects/mib-doc-challenge-work/mib-solution` |
-| **Commit** | `215bc56` |
+| **Commit** | `d2556b0` (train Docker measured at `215bc56`) |
 
 ## Docker contract
 
@@ -33,7 +33,7 @@
 
 ## Train proxy (public labels only)
 
-Official Docker full train, iter-15, commit `215bc56`:
+Official Docker full train, iter-15 (measured at `215bc56`):
 
 | Section | Score |
 | --- | ---: |

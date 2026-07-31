@@ -1,9 +1,9 @@
 # MIB Doc Challenge — Technical Memo
 
 **Author:** Henry Gilbert (`henrygilbert22`)  
-**Solution commit:** `215bc56`  
+**Solution commit:** `d2556b0` (Docker train scored on `215bc56`; later commits are docs/dead-code/import-structure only)  
 **Official Docker train (iter-15):** 121.18 / 150 — classification 64.10, extraction 42.00, calibration 15.08, 11 CFAs  
-**Image / throughput:** 0.46 GiB, ~0.83–1.1 s/PDF (train Docker ~1 s/PDF with embedded-image OCR; pre-embed runs were ~0.83)  
+**Image / throughput:** 0.46 GiB, ~0.83–1.1 s/PDF (train with embedded-image OCR ~1.1 s/PDF)  
 **Validation:** 5,000 / 5,000 under iter-15 image (`predictions.jsonl`); score not reported (private labels)
 
 ---
@@ -62,7 +62,7 @@ Serialization-only fee and categorical imputation fills missing report fields in
 
 Local re-run (same commit, non-Docker): 121.34 / 150 — harness variance, same 11 CFAs.
 
-**Climb:** iter-12 Docker 120.27 → iter-15 121.18 (+0.91). Holdout gate (`case_id % 5 == 0`): adopted embedded-image species recovery at +0.30 total vs prior baseline; full-train CFAs unchanged at 11.
+**Climb:** iter-12 Docker 120.27 → iter-15 121.18 (+0.91). Changes were holdout-gated where applicable; CFAs held at 11.
 
 **Residual CFAs (11):** Mostly truncated packets missing biometric/registry graphic pages, or disqualifying flags present in truth but not in visible registry/OCR text. Not parser bypasses on complete packets. Example: MIB-000865 has biometrics but TRANSIT-7 misread — not fixable by page-count gates.
 
