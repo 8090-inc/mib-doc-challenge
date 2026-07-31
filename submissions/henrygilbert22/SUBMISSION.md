@@ -81,9 +81,9 @@ python3 /path/to/mib-doc-challenge/scripts/run_docker_submission.py \
   --require-complete \
   --cpus 4 --memory 8g --image-tag mib-submission
 
-python3 /path/to/mib-doc-challenge/scripts/evaluate_submission.py \
+python3 /path/to/mib-doc-challenge/scripts/evaluate.py \
   --submission /path/to/output/train_predictions.jsonl \
-  --labels /path/to/mib-doc-challenge/data/train_labels.csv
+  --truth /path/to/mib-doc-challenge/data/train_labels.csv
 ```
 
 ## This folder

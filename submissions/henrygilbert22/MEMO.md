@@ -32,6 +32,8 @@ The FIELD_MANUAL defines visible-evidence precedence: adjudicator stamps and man
 
 7. **Confidence** — Heuristic in `confidence.py`: field completeness, mean OCR confidence, native–OCR corroboration, hidden-text and contradiction penalties, reason-code caps, dual-view dampening when native and OCR disagree on high-stakes fields. Mapped to `[0.01, 0.99]`. No train-fitted lookup table.
 
+Serialization-only fee and categorical imputation fills missing report fields in the output JSONL but does not feed adjudication, which always uses extracted evidence values.
+
 **OCR engine:** Tesseract PSM 11 @ 150 DPI (0% hidden-text leak on bench slice, inside 6 s mean/p95 after selective routing). RapidOCR runner-up but p95 >6 s. Marker/Docling/Surya rejected on image size and CPU latency. Raw PyMuPDF native rejected (100% hidden-text leak).
 
 ---
