@@ -36,7 +36,7 @@ The larger residual is structural absence, and it is not a failure. In the bigge
 
 ## About this entry
 
-This entry was built by a practicing surgeon, not a professional software engineer, as an experiment in how far disciplined orchestration of LLM coding agents can be pushed. Every line of code and every measurement above was produced by directing those agents against pre-registered gates — sealed holdouts, 100%-precision ship bars, and recorded receipts for every declined shortcut — with the human role being direction, skepticism, and final judgment. The runtime itself, per the challenge rules, contains no LLM of any kind.
+I'm a practicing surgeon who entered this challenge to explore the capabilities of agentic coding: the code was written by LLM agents working under my direction.
 
 ## With another week
 
