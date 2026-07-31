@@ -21,9 +21,9 @@ Verified end to end with the organizers' own harness,
 
 | Check | Limit | Measured |
 | --- | --- | --- |
-| Image size | 4 GiB | 0.15 GiB |
+| Image size | 4 GiB | 0.25 GiB |
 | Runtime | 6 s/PDF | ~5 s/PDF in-container incl. engine warm-up |
-| Model artifacts | 1 GiB total | none |
+| Model artifacts | 1 GiB total | PP-OCR ONNX models, ~15 MiB, bundled in the wheel |
 | Structural validity | — | 1000/1000 rows, 0 missing/extra/duplicate/invalid |
 
 Public training score from `scripts/evaluate.py`: **120.36 / 150**
