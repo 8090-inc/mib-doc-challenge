@@ -6,7 +6,7 @@
 | --- | --- |
 | **URL** | https://github.com/henrygilbert22/mib-doc-challenge-solution |
 | **Status** | **Public** |
-| **Commit** | `81d46d1` (train Docker measured at `215bc56`) |
+| **Commit** | `2d30498` (train Docker measured at `215bc56`) |
 
 ## Docker contract
 
