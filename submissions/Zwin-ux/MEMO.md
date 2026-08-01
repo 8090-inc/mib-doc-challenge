@@ -99,13 +99,15 @@ docker run --rm --network none \
 
 Train score with challenge `scripts/evaluate.py` against `data/train_labels.csv` → **150.00 / 150 CFA=0**.
 
-Process showcase (not a private score claim):  
-- Census flight: https://zwin-ux.github.io/XenoLedger/scroll-world/  
+Public pages:
+
+- Final submission: https://zwin-ux.github.io/XenoLedger/scroll-world/  
+- Process report: https://zwin-ux.github.io/XenoLedger/report/  
 - Workbench: https://zwin-ux.github.io/XenoLedger/  
-- Source: `docs/showcase/` on branch `codex/score-control-20260724`
+- Code home: https://github.com/Zwin-ux/XenoLedger
 
 ---
 
 ## Closing
 
-**Mode C is perfect on public train: 150/150 with CFA=0.** The craft is demote-first discipline, stage-stable safety after confidence blend, and residual pure-surface closure under an offline Docker contract—built for hiring-grade engineering judgment as much as for the scoreboard.
+The submitted Docker path runs offline and reapplies safety demotions after confidence blending. On public train, it scored **150/150** with CFA 0.

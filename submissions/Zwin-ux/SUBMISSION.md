@@ -1,4 +1,4 @@
-# Submission — Zwin-ux
+# Submission: Zwin-ux
 
 | | |
 |--|--|
@@ -9,18 +9,21 @@
 | **Entrypoint** | `run.sh <input_pdf_dir> <output_predictions_path>` |
 | **Runtime default** | `MIB_RESIDUAL_CENSUS=1` (residual-census full path) |
 | **Public train (official evaluator)** | **150.00 / 150 · CFA = 0** |
-| **Validation predictions** | `predictions.jsonl` — **5,000** unique case IDs, `validate_submission.py` clean |
+| **Validation predictions** | `predictions.jsonl`, **5,000** unique case IDs, `validate_submission.py` clean |
 | **Technical memo** | `MEMO.md` |
 | **Candidate** | `CANDIDATE.md` |
+| **Method wiki** | **`WIKI.md`** (functions, climb, kill list, peer context) |
 | **Train evaluation receipt** | `train_evaluation.json` |
 
-### Live showcase (GitHub Pages)
+### Public pages
 
 | Surface | URL |
 |---------|-----|
-| **Census flight** (narrative) | https://zwin-ux.github.io/XenoLedger/scroll-world/ |
-| **Workbench** (score / hire instrument) | https://zwin-ux.github.io/XenoLedger/ |
-| **Census instrument** | https://zwin-ux.github.io/XenoLedger/census.html |
+| **Code home** | https://github.com/Zwin-ux/XenoLedger |
+| **Score wiki (repo)** | https://github.com/Zwin-ux/XenoLedger/tree/codex/score-control-20260724/wiki |
+| **Final submission** | https://zwin-ux.github.io/XenoLedger/scroll-world/ |
+| **Process report** | https://zwin-ux.github.io/XenoLedger/report/ |
+| **Workbench** | https://zwin-ux.github.io/XenoLedger/ |
 | Source tree | https://github.com/Zwin-ux/XenoLedger/tree/codex/score-control-20260724/docs/showcase |
 
 ### PINNED_SHA
@@ -29,7 +32,7 @@
 PINNED_SHA=c25a47845ad0eb1307c84484df7bf564c8fbe0cb
 ```
 
-That commit ships the Mode C package, 5k validation predictions, production showcase, and Pages workflow. Later commits on the branch are docs-only pin/polish.
+That commit contains the residual-census path, 5,000 validation predictions, public pages, and Pages workflow. Later commits on the branch only update docs.
 
 ### Contract statements
 
