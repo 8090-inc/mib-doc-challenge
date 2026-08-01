@@ -41,6 +41,11 @@ clean clone of the public repository.
 The per-PDF figure is whole-batch wall-clock at 4 workers, which saturate the
 4-vCPU quota (measured 400% CPU); the projection scales that rate to 5,000
 packets. Peak RSS is the maximum over `docker stats` sampling across the run.
+The margin is not fragile: an earlier in-container measurement taken while the
+host was busy with concurrent work gave 4.19 s/PDF, which still projects to
+~20,900 s (5.8 h) — inside the cap with 1.43× to spare. Past that, the
+batch-deadline governor is what keeps a slow evaluation host from turning a
+budget overrun into a hard kill.
 The memory ceiling was verified at 7.65 GiB rather than a full 8 GiB, because
 that is all the local Docker VM could supply; peak usage sits far enough below
 either figure that the difference does not bind.
