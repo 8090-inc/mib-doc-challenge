@@ -3,17 +3,19 @@
 ## Summary
 
 An offline, CPU-only, visible-evidence ensemble. On the 1,000 labeled training
-packets the submitted configuration scores **135.1215 / 150** with **1
-catastrophic false approval** (extraction 45.0411, classification 71.4500,
-calibration 18.6304, evaluated by the official `evaluate.py`). The retained
+packets the submitted configuration scores **135.2622 / 150** with **1
+catastrophic false approval** (extraction 45.0411, classification 71.5800,
+calibration 18.6411, evaluated by the official `evaluate.py`). This is an
+in-sample development replay, not an unbiased private-test estimate. The retained
 exact-contract Docker receipt is **4.46 seconds/PDF** on a representative
 100-case run (4 vCPU, no network, read-only root); the measured incremental
-raster-note and JSON-calibration stages project the complete refreshed route
-at **~5.27 seconds/PDF**, against the 6-second budget. The reviewer stage is
+raster-note and JSON-calibration stages plus the latest operator timing place
+the complete refreshed route at **~5.5–5.6 seconds/PDF**, against the 6-second
+budget. The reviewer stage is
 additionally bounded at 3 seconds/PDF *by construction*. The 5,000 refreshed
 validation predictions pass the organizer validator with 0 missing case IDs
 and carry SHA-256
-`61ccaff7a252600a5e9f56a9cf5404b82407e831cf812fabd099aeefe8977dfa`.
+`c3c7098ff75921d2217bc473bb666a6c0fa467ff36160971b895e73dea85c137`.
 
 No LLM, VLM, cloud OCR, network call, label file, case-ID lookup, or hidden
 answer text is used at runtime.
@@ -45,8 +47,11 @@ at will.
    stamp, watermark, fee, and terminal-decision guards; approval heads were
    discovered on one hash fold, replicated on a second, and frozen before a
    third. Full-train purpose/page-signature exception tables were excluded as
-   non-transferable.
-4. **Selective independent reviewer with a confidence-gated approval vote.**
+   non-transferable. A final policy invariant prevents any approval from
+   serializing a public disqualifying or mandatory-review risk flag unless a
+   later visible signed finding supplies the manual's higher-precedence
+   decision.
+4. **Selective independent reviewer with monotone terminal votes.**
    Cases still `NEEDS_REVIEW` may be re-read by an independently derived MIT
    pipeline. Selection is label-blind: only packets whose primary row looks
    clean (no risk flags, resolved fee, ≤1 unresolved field) and which have ≤2
@@ -56,15 +61,18 @@ at will.
    gets 60 seconds (measured sufficient: raising the cap to 90/150 s produced
    no additional votes), under a global budget of 3 seconds per input PDF that
    degrades unprocessed cases to their conservative NEEDS_REVIEW rows. The
-   merger permits exactly one mutation:
+   merger permits two narrowly bounded mutations:
 
    ```text
    NEEDS_REVIEW + independent APPROVED at confidence >= 0.695 -> APPROVED
+   NEEDS_REVIEW + independent DENIED + shared public-manual cause -> DENIED
    ```
 
-   Denials, reviews, low-confidence votes, and failures are abstentions; the
-   reviewer's extracted fields are always discarded; primary denials are never
-   reopened.
+   The denial route has no learned threshold: both readers must serialize the
+   same causal `TRANSIT-7`, public revoked sponsor, unpaid fee, or public
+   disqualifying risk token. Inferred sponsor IDs, learned-only denials,
+   reviews, low-confidence approvals, and failures abstain. Reviewer fields are
+   always discarded and primary terminal decisions are never reopened.
 5. **Explicit adjudicator finding.** A bounded post-vote pass applies a
    decision only from a unique, conflict-free visible `Finding:` line. Text
    findings are handled without extra OCR; raster findings use the existing
@@ -91,6 +99,22 @@ On validation, the 0.695 threshold changes 10 decisions relative to the earlier
 0.70 file. Across all refreshed channels, 69 of 5,000 categorizations change
 with zero extracted-field changes.
 
+The public-causal denial guard adds one exact-train correction and changes one
+of 5,000 validation decisions. It was specified from the public manual and
+cross-reader evidence agreement rather than selected by a confidence sweep.
+Because its only possible transition is `NEEDS_REVIEW -> DENIED`, it cannot add
+a catastrophic false approval. The merge measured 0.12 seconds for all 5,000
+rows (0.000024 seconds/PDF).
+
+The final serialized-risk consistency guard adds one further exact-train
+correction, taking the development replay from 135.1858 to 135.2622. It changes
+four of 5,000 validation decisions, all away from approval, and changes no
+fields. It is a direct public-policy invariant over the already-produced row:
+no label, fitted threshold, case ID, PDF signature, model call, or additional
+OCR participates. This incremental rule cannot add a catastrophic false
+approval. The full 135.2622 headline still includes the pre-existing full-fit
+confidence calibrator and is not an unbiased private-test estimate.
+
 ## Measurement discipline
 
 - Hash-fold splits with an untouched fold for single reads; every lever
@@ -98,7 +122,8 @@ with zero extracted-field changes.
 - Spike-before-scale: each idea was proven or killed on a bounded sample
   before any full run.
 - Measured-dead levers (kept dead with their killing measurements): reviewer
-  field-union, deny votes at any threshold, both-engines-agree consensus
+  field-union, broad or learned deny votes at any threshold, unconstrained
+  both-engines-agree consensus
   (agreement anti-selects on this generator — packets with destroyed denial
   evidence fool both engines together), timeout arbitration of low-confidence
   denials, answer-key transcription, cross-field imputation, and post-hoc
@@ -128,8 +153,11 @@ with zero extracted-field changes.
 
 Offline (`--network none`), CPU-only, read-only root, writable `/tmp` only;
 the retained image is 687 MB (cap 4 GiB); model artifacts remain far below the
-250 MB/1 GB caps; one valid JSONL row per input; **124 unit tests
-pass**. Vendored MIT/Apache components and model provenance are documented in
+250 MB/1 GB caps; one valid JSONL row per input; **18/18 focused decision-guard
+tests and 129/131 full-image tests pass**. The two existing image-sensitive
+failures are the synthetic 90-degree raster read and crossed-out-stamp
+heuristic; neither is on the changed path. Vendored MIT/Apache components and
+model provenance are documented in
 `THIRD_PARTY_NOTICES.md` and under `vendor/`; the selection, gating, budget,
 and merge logic described above is original work in this repository.
 
