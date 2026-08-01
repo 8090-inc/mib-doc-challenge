@@ -85,6 +85,33 @@ documentation only, verifiable with
 `git diff fd6bbf6..HEAD -- mib scripts models tests tools Dockerfile run.sh`
 (empty output), so a rebuild at any later commit reproduces the same rows.
 
+## Running this yourself
+
+- The `Dockerfile` builds clean for **linux/amd64** as well as linux/arm64
+  (0.295 GiB and 0.267 GiB; every pinned wheel resolves on both), and packets
+  processed by the amd64 image produce rows **byte-identical** to the
+  arm64-produced submitted rows. The measurements above are arm64.
+- To run the test suite, use the image — no local Python setup, and the
+  dependency versions are guaranteed to match:
+
+  ```bash
+  docker build -t mib-submission .
+  docker run --rm --entrypoint bash -v "$PWD:/src" -w /src mib-submission -c \
+    "apt-get update -qq && apt-get install -y -qq git && pip install -q pytest && \
+     python -m pytest tests/ -q"
+  # 1,034 passed, 66 skipped, 0 failed
+  ```
+
+  `git` and `pytest` are installed only for the suite; neither is in the
+  runtime image, and only this command needs network. The 66 skips are the
+  data-backed tests — with `MIB_CHALLENGE_DIR` pointing at a challenge
+  checkout they run too: 1,049 passed, 51 skipped, 0 failed.
+- Running the suite locally instead needs the `Dockerfile`'s pinned versions on
+  **Python 3.11–3.13**. `onnxruntime==1.20.1` publishes no wheel for Python
+  3.14, and on an unpinned interpreter about a dozen OCR-path tests fail in
+  engine construction because newer `rapidocr-onnxruntime` releases changed the
+  `RapidOCR(...)` detector-parameter API. Neither is a code failure.
+
 ## Notes for review
 
 - No hardcoded answers or per-PDF lookup tables: no model artifact contains a
@@ -124,10 +151,8 @@ documentation only, verifiable with
   checkout through `MIB_CHALLENGE_DIR`.
 - 1,100 tests — 1,049 passed, 51 skipped, 0 failed against the `Dockerfile`'s
   pinned dependency set; those that skip without the optional dev-extraction
-  fixtures skip deliberately rather than passing vacuously. Run the suite on
-  the pinned versions: newer `rapidocr-onnxruntime` releases changed the
-  detector-parameter API, so an unpinned interpreter fails roughly a dozen
-  OCR-path tests in engine construction, before any assertion runs.
+  fixtures skip deliberately rather than passing vacuously. See "Running this
+  yourself" above for the one-command recipe.
 - The image links PyMuPDF, which is AGPL-3.0, so the built image as a
   distributed whole carries AGPL-3.0 terms while our own code remains MIT.
   The corresponding source is the public repository above. See `NOTICE.md`.
