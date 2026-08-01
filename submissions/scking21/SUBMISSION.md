@@ -7,6 +7,13 @@ https://github.com/scking21/mib-solution
 The predictions in this folder were produced by commit
 [`ee5ef86`](https://github.com/scking21/mib-solution/commit/ee5ef86ef1641f5b3904b5e7c4d7ebdef2f06ef4).
 
+The follow-up solution commit
+[`57c6e70`](https://github.com/scking21/mib-solution/commit/57c6e700ef5617a398e9df3ffd640f0740b76791)
+adds a confidence-calibrator safety fallback and does not change the submitted
+predictions: `MIB_DISABLE_CONFIDENCE_CALIBRATOR=1` bypasses the optional
+calibrator, while a missing or invalid artifact falls back to baseline
+confidence without changing extracted fields or adjudication.
+
 The repository contains the `Dockerfile` at its root, along with the `mib/`
 package, `rules/` (policy, fitted posteriors, and two small fitted model
 artifacts), `run.sh`, and `tests/`.
