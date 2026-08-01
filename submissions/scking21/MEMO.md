@@ -3,17 +3,26 @@
 ## Result
 
 The submitted pipeline is offline, CPU-only, and deterministic by construction.
-On all 1,000 public training packets it produced 1,000 valid records with no
-missing, extra, duplicate, or schema-invalid cases and scored **122.31 / 150**:
-41.70/50 extraction, 64.72/80 classification, and 15.89/20 calibration. It made
-**10 catastrophic false approvals**. Two independent full runs are byte-identical.
+On all 1,000 public training packets it produces 1,000 valid records with no
+missing, extra, duplicate, or schema-invalid cases and scores **129.00 / 150**:
+43.47/50 extraction, 68.86/80 classification, and 16.67/20 calibration, with
+**8 catastrophic false approvals**.
 
-Against the previous 119.33 checkpoint that is +2.98 total with four *fewer*
-false approvals — the gain is in classification (+2.36) and calibration (+0.62),
-with extraction flat. The improvement is not a better-tuned posterior. It comes
-from declining points the fitted probabilities offered: the largest single change
-forbids approval at one terminal, which costs classification points and buys back
-more in avoided −4 penalties and in calibration.
+Against the previous 122.31 revision of this memo that is +6.69 with two fewer
+false approvals. Three things account for it: a candidate-trained classifier
+blended with the deterministic posterior, fitted output defaults for
+closed-vocabulary fields the pipeline could not read, and a post-decision
+correctness calibrator. All three are described below.
+
+**This number is not the number the leaderboard scores, and it understates us.**
+`EVALUATION.md:117` removes from each case's extraction maximum any field whose
+visible evidence was cut out, washed out, torn away, or present only in untrusted
+hidden text; `EVALUATION.md:119` says the public `train_labels.csv` deliberately
+omits that column. So the figure above is charged for fields the private scorer
+does not count. Of our 1,131 wrong fields, **398 have their true value only in
+quarantined hidden text** and 665 are absent from visible evidence entirely.
+Removing just the first group raises extraction on these same predictions from
+43.72 to **45.74**. We decline those 398 on purpose; see "The answer key" below.
 
 ## Approach
 
@@ -79,6 +88,55 @@ EV(NEEDS_REVIEW) = 2p + 2q + 8r
 Reported confidence is the posterior probability of the chosen class, which is
 the proper quantity for the evaluator's Brier term.
 
+**Two small fitted models sit on top, and neither can reach a field.**
+`EVALUATION.md:70` bans LLMs, VLMs, multimodal foundation models, and cloud OCR
+while explicitly permitting small task-specific and candidate-trained models.
+Both of ours are that: hand-specified features, fitted offline on the public
+training set, shipped as artifacts totalling 3.02 MiB, CPU-only, no network.
+
+1. **A blended adjudication classifier** (`mib/blend.py`, `rules/blend.pkl`,
+   3.01 MiB). A gradient-boosted tree over 64 evidence, coverage, and damage
+   features, convex-blended into the deterministic posterior at weight 0.4 —
+   *blended with*, never replacing. `policy.allowed_labels` is applied on top of
+   the blend, so a label the policy forbids stays forbidden however confident the
+   model is; that ordering is the trust boundary, not an optimisation. The weight
+   was selected out of fold on the challenge payoff matrix, paired against weight
+   0 on identical splits: −2.60 false approvals and +0.110 classification,
+   improving in 5 of 5 repeats. No case id, filename, or quarantined text is ever
+   a feature. Cases settled by a visible adjudicator finding are excluded from
+   training and short-circuited at inference — the deterministic path owns them.
+
+2. **A post-decision correctness calibrator** (`mib/calibrate.py`,
+   `rules/correctness.json`, 4 KiB). A ridge regression over 25 quantities the
+   decision layer has already produced — posterior, blended posterior, model
+   probabilities, top-two margin, disagreement, and the emitted label and
+   confidence — predicting whether the emitted adjudication is correct. It runs
+   *after* the label is final and is given no way to reach a field or an
+   adjudication; enabling or disabling the artifact leaves all nine fields and
+   every adjudication byte-identical and moves only the 689 non-settled
+   confidences. Worth +0.38 calibration (Brier 0.0927 → 0.0832) with the
+   catastrophic false-approval count unchanged. It ships as plain JSON
+   coefficients rather than a pickle, so the runtime path does not deserialise
+   arbitrary objects and does not depend on a scikit-learn version; the artifact
+   is still SHA-256 pinned and refuses to load against a different feature order.
+
+## The answer key
+
+~20% of packets carry an injected answer key in hidden text. It is the single
+largest apparent extraction opportunity in the corpus and we decline it.
+
+Measured on our own output: of 1,131 wrong fields, **398 have their true value
+present only in quarantined hidden text**. Reading them would raise the public
+training score by roughly two extraction points. It would gain essentially
+nothing on the private set, because `EVALUATION.md:117` removes exactly those
+fields from each case's extraction maximum, and `EVALUATION.md:184` penalizes
+outputs that follow adversarial hidden instructions. The trade is
+strictly negative once the metric that counts is the one being optimised.
+
+That is why the trust boundary is the first thing in the pipeline rather than a
+filter bolted on afterwards, and why hidden content is permitted to push a
+decision only *away* from approval, never toward it.
+
 **Where the EV rule is overridden, it is overridden by a stated rule.**
 `never_approve_terminals` lists terminals whose defining condition is *missing
 required evidence*, and approval is removed from the candidate set there
@@ -101,14 +159,60 @@ The constraint lives in the policy file rather than inside a tuned probability
 on purpose. The posterior keeps describing what the training data actually did,
 and a reviewer can see the judgement call and disagree with it.
 
+That rule was re-tested after the blended classifier shipped, because the blend
+now filters the bucket before the policy sees it and the original arithmetic
+predated it. **In sample the case for lifting it looks strong and it is a
+mirage.** Of the 33 packets where the policy overrides an EV decision that wanted
+APPROVED, truth is 31 APPROVED, 1 NEEDS_REVIEW, 1 DENIED — apparently one false
+approval rather than ten. Out of fold, on 5 folds × 5 repeats with the blend
+refitted inside every fold, it costs **+5.20 false approvals** for +0.45 combined
+points, because the model that made the bucket look safe was fitted on those very
+rows. The rule stands.
+
+## Levers measured and rejected
+
+Recorded because the negative results are the substance of the design, and each
+was cheap only because it was measured before it was built:
+
+- **Second-reader hedge conversion.** Using an independently derived reading of
+  the packet to convert `NEEDS_REVIEW` into a decisive call: 40.0% precision
+  against a 36.4% base rate on the gated stratum — no information. The reverse
+  direction, using a second reader to veto approvals, catches **0 of our 8**
+  catastrophic false approvals while destroying up to 77 correct approvals.
+- **Detecting `illegible_biometrics` structurally** rather than reading it, since
+  it is the one flag that describes an unreadable panel rather than a printed
+  value: 19 field strings fixed, 39 broken. Damage in this corpus is applied
+  independently of flag content, so a destroyed slip is `none` about twice as
+  often as it is `illegible`.
+- **Label-anchored fuzzy repair** of garbled values next to a readable field
+  label (`Fee Status: carved`): ceiling of 5 recoverable cases across the whole
+  corpus.
+- **Richer confidence calibration** — evidence-quality features, and a logistic
+  model with per-class isotonic correction — both within 0.05 calibration points
+  of the shipped ridge.
+
+The common finding: 347 of 381 hedges are chosen by the EV rule itself rather
+than forced by a policy constraint. The decision layer is already making the
+payoff-optimal call given its evidence, so converting hedges requires new
+evidence, not a new threshold.
+
 ## Failure modes and another week
 
-The largest remaining extraction losses are not all recoverable. At an earlier
-40.56/50 checkpoint, the 9.44 missing points split into 1.82 points of visible
-evidence the pipeline misread, 2.68 points present only in quarantined text, and
-4.93 points absent from the PDF. Private scoring removes genuinely
-unrecoverable fields from a case's maximum, while the public labels do not
-contain that metadata.
+**Most of the remaining extraction loss is not recoverable, and that is now
+measured rather than asserted.** Of the 1,131 wrong fields at 43.47/50, only
+**68 have their true value present anywhere in visible text** — a ceiling of
+0.378 points. 398 are present only in quarantined hidden text, which we decline;
+665 are absent from the PDF altogether. Private scoring removes the genuinely
+unrecoverable ones from each case's maximum while the public labels do not carry
+that metadata, which is why the public figure understates the submitted system.
+
+The 8 remaining catastrophic false approvals are all of one kind: the packet is
+missing its disqualifying evidence rather than obscuring it. Seven read
+`risk_flags` as `none` against a true disqualifying flag, and **not one of those
+packets contains any line mentioning "risk" or "flag"** on any page, visible or
+quarantined. A guard that demoted every approval lacking a risk panel would avoid
+7 of them and forfeit 112 correct approvals, so no rule recovers them; only a
+different document would.
 
 The highest-priority engineering gap is multi-applicant isolation. The manual
 warns that one packet may contain several applicants, with the active `case_id`
@@ -134,6 +238,13 @@ case-id lookup table is present. Development models were used only as analysis
 instruments; every runtime behavior they motivated was reimplemented as
 deterministic code and covered by ordinary tests or measured corpus probes.
 
-The repository includes the exact offline/read-only Docker command, 93 unit and
+The repository includes the exact offline/read-only Docker command, 168 unit and
 adversarial regression tests, the public scoring commands, and `docs/RECON.md`
 with the measurements and rejected experiments behind the design.
+
+The two fitted artifacts are reproducible from the repository:
+`scripts/fit_blend_artifact.py` and `scripts/fit_correctness_artifact.py` each
+print the SHA-256 that `mib/cli.py` pins, and the runtime refuses to load an
+artifact whose digest or feature order does not match. Both scripts import their
+feature builders from the `mib/` package rather than redefining them, so the
+model cannot be served vectors it was not trained on.
