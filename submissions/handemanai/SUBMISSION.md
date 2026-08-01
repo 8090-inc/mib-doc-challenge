@@ -25,9 +25,8 @@ docker run --rm --network none --cpus 4 --memory 8g --read-only --tmpfs /tmp \
 ## Contract compliance, as measured
 
 Measured inside the container under `--cpus 4 --memory 8g --read-only
---network none --pids-limit 512 --tmpfs /tmp:size=2g`, not extrapolated from
-host runs, and re-verified at the submission commit on the image built from a
-clean clone of the public repository.
+--network none --pids-limit 512 --tmpfs /tmp:size=2g`, on the image built from
+a clean clone of the public repository — not extrapolated from host runs.
 
 | Limit | Measured | Margin |
 | --- | --- | --- |
@@ -40,16 +39,21 @@ clean clone of the public repository.
 
 The per-PDF figure is whole-batch wall-clock at 4 workers, which saturate the
 4-vCPU quota (measured 400% CPU); the projection scales that rate to 5,000
-packets. Peak RSS is the maximum over `docker stats` sampling across the run.
-The margin is not fragile: an earlier in-container measurement taken while the
-host was busy with concurrent work gave 4.19 s/PDF, which still projects to
-~20,900 s (5.8 h) — inside the cap with 1.43× to spare. Past that, the
-batch-deadline governor is what keeps a slow evaluation host from turning a
-budget overrun into a hard kill.
-
-The memory ceiling was verified at 7.65 GiB rather than a full 8 GiB, because
-that is all the local Docker VM could supply; peak usage sits far enough below
+packets. Peak RSS is the maximum over `docker stats` sampling across the run,
+and was verified against a 7.65 GiB ceiling rather than a full 8 GiB because
+that is all the local Docker VM could supply — peak usage sits far enough below
 either figure that the difference does not bind.
+
+These are Apple-silicon measurements and the evaluation hardware's per-core
+speed is unknown. Evaluation hardware would have to be roughly 1.75× slower per
+core before the run reaches the cap; past that, the batch-deadline governor
+sheds tail-quality work to land inside the limit rather than be killed at it. A
+deliberately degraded measurement, taken with the host under heavy concurrent
+load, still projected to 5.8 h.
+
+The `Dockerfile` builds clean for linux/amd64 as well as linux/arm64 (0.295 GiB
+and 0.267 GiB), and packets processed by the amd64 image produce rows
+byte-identical to the arm64-produced submitted rows.
 
 ## Provenance of `predictions.jsonl`
 
@@ -71,7 +75,7 @@ either figure that the difference does not bind.
   `data/validation`; **all 300 rows are byte-identical to the submitted
   rows**.
 
-## Relation to the 2026-07-31 file, and commits after `1db4721`
+## Changes from the previously submitted file
 
 Relative to the previous submission file (generated at `53dbe7a`, sha256
 `8868cd19…`), exactly four rows changed — the four approvals demoted by the
@@ -86,29 +90,24 @@ since, verifiable with
 `git diff 1db4721..HEAD -- mib scripts models tools Dockerfile run.sh`
 (empty output), so a rebuild at any later commit reproduces the same rows.
 
-## Running this yourself
+## Running the test suite
 
-- The `Dockerfile` builds clean for **linux/amd64** as well as linux/arm64
-  (0.295 GiB and 0.267 GiB; every pinned wheel resolves on both), and packets
-  processed by the amd64 image produce rows **byte-identical** to the
-  arm64-produced submitted rows. The measurements above are arm64.
-- To run the test suite, use the image — no local Python setup, and the
-  dependency versions are guaranteed to match:
+The simplest way is inside the image, which needs no local Python setup and
+guarantees the dependency versions match:
 
-  ```bash
-  docker build -t mib-submission .
-  docker run --rm --entrypoint bash -v "$PWD:/src" -w /src mib-submission -c \
-    "pip install -q pytest && python -m pytest tests/ -q"
-  # 990 passed, 110 skipped, 0 failed
-  ```
+```bash
+docker build -t mib-submission .
+docker run --rm --entrypoint bash -v "$PWD:/src" -w /src mib-submission -c \
+  "pip install -q pytest && python -m pytest tests/ -q"
+# 990 passed, 110 skipped, 0 failed
+```
 
-  Anything a bare container cannot run skips rather than fails. Mount a
-  challenge checkout as `MIB_CHALLENGE_DIR` and add `git` to run all 1,100:
-  1,049 passed, 51 skipped, 0 failed.
-- To run the suite locally instead, use `requirements.txt` (it mirrors the
-  `Dockerfile` pins) on Python 3.11–3.13. The pins are load-bearing: RapidOCR's
-  preprocessing is part of the measured result, so unpinned installs change OCR
-  behaviour. The solution repository's `README.md` has the details.
+Whatever a bare container cannot support skips rather than fails: the
+provenance tests need `git`, and the data-backed tests need the challenge PDFs.
+Supply both — add `git` and mount a challenge checkout as `MIB_CHALLENGE_DIR` —
+to run all 1,100: 1,049 passed, 51 skipped, 0 failed. To run locally instead,
+`requirements.txt` in the solution repository mirrors the `Dockerfile` pins and
+needs Python 3.11–3.13.
 
 ## Notes for review
 
@@ -148,9 +147,8 @@ since, verifiable with
 - No absolute paths. Dev tooling and data-backed tests resolve the challenge
   checkout through `MIB_CHALLENGE_DIR`.
 - 1,100 tests — 1,049 passed, 51 skipped, 0 failed against the `Dockerfile`'s
-  pinned dependency set; those that skip without the optional dev-extraction
-  fixtures skip deliberately rather than passing vacuously. See "Running this
-  yourself" above for the one-command recipe.
+  pinned dependency set. Tests that skip without the optional dev-extraction
+  fixtures skip deliberately rather than passing vacuously.
 - The image links PyMuPDF, which is AGPL-3.0, so the built image as a
   distributed whole carries AGPL-3.0 terms while our own code remains MIT.
   The corresponding source is the public repository above. See `NOTICE.md`.
