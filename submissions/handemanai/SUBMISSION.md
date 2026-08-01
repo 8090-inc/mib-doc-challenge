@@ -46,25 +46,31 @@ either figure that the difference does not bind.
 - **5,000 records, 0 missing.** Passes the challenge repository's
   `scripts/validate_submission.py --require-complete` against
   `data/validation_manifest.csv`.
-- **sha256:** `8868cd194305d57b85bd7f291dead571bb4c26fa6537397052e2128220e86755`
+- **sha256:** `6d51c904f006b80de9a7140c27ac8852776fd12b11b49f34a25214101ebe374a`
 - Produced by a single uninterrupted 5,000-packet run of `scripts/predict.py`
-  over `data/validation` at the code published as commit `53dbe7a` of the
-  solution repository, in 4h06m wall at 4 workers, with **zero per-case
-  timeouts and zero retries** (slowest packet 57.4 s), and a full per-case
+  over `data/validation` at the code published as commit `fd6bbf6` of the
+  solution repository, in 4h04m wall at 4 workers, with **zero per-case
+  timeouts and zero retries** (slowest packet 57.0 s), and a full per-case
   evidence ledger retained.
 - Cross-checked against the shipped container: a clean clone of the public
-  repository at `53dbe7a` was built with the published `Dockerfile` and run
+  repository at `fd6bbf6` was built with the published `Dockerfile` and run
   under the scoring flags (`--network none --cpus 4 --memory 8g --read-only
   --tmpfs /tmp`) on sample validation packets; the container rows match the
   submitted rows byte-for-byte.
 
-## Documentation-only commits after `53dbe7a`
+## Relation to the 2026-07-31 file, and commits after `fd6bbf6`
 
-The submitted `predictions.jsonl` was generated at commit `53dbe7a` of the
-solution repository. Every commit after `53dbe7a` touches documentation and
-experiment receipts only — nothing under `mib/`, `scripts/`, `models/`,
-`tests/`, `tools/`, `Dockerfile`, or `run.sh` changes, verifiable with
-`git diff 53dbe7a..HEAD -- mib scripts models tests tools Dockerfile run.sh`
+Relative to the previous submission file (generated at `53dbe7a`, sha256
+`8868cd19…`), exactly four rows changed — the four approvals demoted by the
+anti-oracle guard (`MIB-101326`, `MIB-101982`, `MIB-102278`, `MIB-104773`,
+each APPROVED → NEEDS_REVIEW with every extracted field unchanged); the
+other 4,996 rows are byte-identical. The code delta `53dbe7a..fd6bbf6` is
+the anti-oracle guard enablement, the batch-deadline governor (inert on
+hardware inside the batch budget: the full-training-set gate at `fd6bbf6`
+reproduces the certified 128.916 byte-identically with zero governor
+engagements), and documentation. Commits after `fd6bbf6` touch
+documentation only, verifiable with
+`git diff fd6bbf6..HEAD -- mib scripts models tests tools Dockerfile run.sh`
 (empty output), so a rebuild at any later commit reproduces the same rows.
 
 ## Notes for review
@@ -79,16 +85,32 @@ experiment receipts only — nothing under `mib/`, `scripts/`, `models/`,
   MIB-102051 discussed in `docs/REVIEWER_GUIDE.md`.)
 - Every APPROVED row is re-adjudicated against the exact field values it
   emits before it is written (`mib/two_ledger.py`,
-  `enforce_final_consistency`). A small number of approvals (21 of 707)
-  deliberately retain a field value that superficially contradicts approval:
-  each is backed by a legible rank-1 adjudicator-note Finding — the field
-  manual's highest-precedence evidence — resolving a contradiction the
-  generator planted in a lower-precedence page, and each retention is
-  recorded in the evidence ledger. On the labeled training set this shape is
-  note-right, field-wrong (e.g. MIB-000893).
+  `enforce_final_consistency`). A small number of approvals (27 of 703: 23
+  whose retained fields would re-adjudicate DENIED — revoked sponsor 10,
+  TRANSIT-7 visa 6, embargoed world 3, unpaid fee plus a second blocker 2,
+  stale arrival date 2 — and 4 whose unknown fee would re-adjudicate
+  NEEDS_REVIEW) deliberately retain a field value that superficially
+  contradicts approval: each is backed by a legible rank-1 adjudicator-note
+  Finding — the field manual's highest-precedence evidence ("visible MIB
+  adjudicator stamp or signed manual note", above intake form fields) —
+  resolving a contradiction the generator planted in a lower-precedence
+  page, and each retention is recorded in the evidence ledger. On the
+  labeled training set a readable note Finding matches ground truth in 305
+  of 305 cases across all three decision classes, including all 44 cases
+  where the note contradicts the field-level policy verdict (the fee shape's
+  labeled instance is MIB-000893), and every one of the 27 retained
+  approvals was page-audited against the rendered packet before submission.
+- The shipped container enables `MIB_ANTI_ORACLE_GUARD` (`run.sh`): a
+  tentative APPROVED whose packet carries a hidden answer key itself
+  claiming APPROVED, with no adjudicator-note authority behind the
+  approval, demotes to NEEDS_REVIEW. The planted key's adjudication is
+  wrong in all 216 labeled occurrences, so agreement with it is a trap
+  signature; the demotion is distrust-direction only (hidden content is
+  never evidence and can never move a decision toward approval) and fires
+  on zero of the 1,000 labeled training cases.
 - No absolute paths. Dev tooling and data-backed tests resolve the challenge
   checkout through `MIB_CHALLENGE_DIR`.
-- 1,085 tests; those that skip without the optional dev-extraction fixtures
+- 1,100 tests; those that skip without the optional dev-extraction fixtures
   skip deliberately rather than passing vacuously.
 - The image links PyMuPDF, which is AGPL-3.0, so the built image as a
   distributed whole carries AGPL-3.0 terms while our own code remains MIT.
