@@ -46,6 +46,7 @@ host was busy with concurrent work gave 4.19 s/PDF, which still projects to
 ~20,900 s (5.8 h) — inside the cap with 1.43× to spare. Past that, the
 batch-deadline governor is what keeps a slow evaluation host from turning a
 budget overrun into a hard kill.
+
 The memory ceiling was verified at 7.65 GiB rather than a full 8 GiB, because
 that is all the local Docker VM could supply; peak usage sits far enough below
 either figure that the difference does not bind.
@@ -80,9 +81,9 @@ other 4,996 rows are byte-identical. The code delta `53dbe7a..fd6bbf6` is
 the anti-oracle guard enablement, the batch-deadline governor (inert on
 hardware inside the batch budget: the full-training-set gate at `fd6bbf6`
 reproduces the certified 128.916 byte-identically with zero governor
-engagements), and documentation. Commits after `fd6bbf6` touch
-documentation only, verifiable with
-`git diff fd6bbf6..HEAD -- mib scripts models tests tools Dockerfile run.sh`
+engagements), and documentation. Nothing that produces predictions has changed
+since, verifiable with
+`git diff fd6bbf6..HEAD -- mib scripts models tools Dockerfile run.sh`
 (empty output), so a rebuild at any later commit reproduces the same rows.
 
 ## Running this yourself
@@ -97,20 +98,17 @@ documentation only, verifiable with
   ```bash
   docker build -t mib-submission .
   docker run --rm --entrypoint bash -v "$PWD:/src" -w /src mib-submission -c \
-    "apt-get update -qq && apt-get install -y -qq git && pip install -q pytest && \
-     python -m pytest tests/ -q"
-  # 1,034 passed, 66 skipped, 0 failed
+    "pip install -q pytest && python -m pytest tests/ -q"
+  # 990 passed, 110 skipped, 0 failed
   ```
 
-  `git` and `pytest` are installed only for the suite; neither is in the
-  runtime image, and only this command needs network. The 66 skips are the
-  data-backed tests — with `MIB_CHALLENGE_DIR` pointing at a challenge
-  checkout they run too: 1,049 passed, 51 skipped, 0 failed.
-- Running the suite locally instead needs the `Dockerfile`'s pinned versions on
-  **Python 3.11–3.13**. `onnxruntime==1.20.1` publishes no wheel for Python
-  3.14, and on an unpinned interpreter about a dozen OCR-path tests fail in
-  engine construction because newer `rapidocr-onnxruntime` releases changed the
-  `RapidOCR(...)` detector-parameter API. Neither is a code failure.
+  Anything a bare container cannot run skips rather than fails. Mount a
+  challenge checkout as `MIB_CHALLENGE_DIR` and add `git` to run all 1,100:
+  1,049 passed, 51 skipped, 0 failed.
+- To run the suite locally instead, use `requirements.txt` (it mirrors the
+  `Dockerfile` pins) on Python 3.11–3.13. The pins are load-bearing: RapidOCR's
+  preprocessing is part of the measured result, so unpinned installs change OCR
+  behaviour. The solution repository's `README.md` has the details.
 
 ## Notes for review
 
