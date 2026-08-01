@@ -10,6 +10,10 @@ estimates. It is packaged as a Docker image that accepts the required input
 directory and output JSONL path, uses no network services, and runs within the
 published four-CPU and eight-gigabyte limits.
 
+The final pipeline scored approximately **124.4 out of 150** on the complete
+public 1,000-case training benchmark. I report this specifically as a public
+training score; validation and private-test labels are not available locally.
+
 ## Document and OCR Pipeline
 
 Each PDF page is rendered at 180 DPI using Poppler. I run Tesseract with three
