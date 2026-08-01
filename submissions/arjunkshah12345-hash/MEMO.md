@@ -1,31 +1,35 @@
-# Technical Memo — Private-first Moonshots/tyler fork
+# Technical Memo — Moonshots extraction + Strobl graft (private-first)
 
 ## Approach
 
-This submission reuses the audited Calling Moonshots / tylergibbs1 visible-evidence
-OCR runtime under MIT (see `ATTRIBUTION.md`). The rendered page is the trust
-boundary; RapidOCR/PP-OCR reads visible text; deterministic rules plus a narrow
-`insufficient_evidence` review resolver adjudicate.
+Dual-pipeline graft aimed at private transfer, not public-train laundry:
 
-## Private-transfer delta (only)
+1. **Calling Moonshots / tyler OCR** (`mib/`) for field extraction and base
+   adjudication (RapidOCR-onnxruntime, native ledger, review model).
+2. **Strobl visible-evidence pipeline** (`mib_pipeline/`) as an independent
+   second opinion (pypdfium2 + Tesseract + RapidOCR recovery + pinned
+   calibration).
+3. **VisibleScoreFinalizer** on Moonshots rows → hybrid fields/decisions.
+4. **Graft demote** (`mib_pipeline/graft.py`): if hybrid is `APPROVED` but Strobl
+   is not, and hybrid confidence ≤ **0.913**, emit Strobl adjudication +
+   confidence. Never invents `APPROVED`.
 
-Upstream’s own memo ties catastrophic false approvals to score-optimal
-`insufficient_evidence` → APPROVED bets. We keep their OCR/clerk intact and add:
+Public train (official `evaluate.py`, locked): **136.07 / 150, CFA = 0**
+(field 45.48, class 72.74, cal 17.84). Threshold is the lowest CFA=0 cut on the
+confidence×disagree frontier.
 
-1. `MIB_REVIEW_MARGIN=0.35` (default in `run.sh`) — require a small EV margin
-   before the resolver may mint APPROVED.
-2. `mib/private_edge.py` — one-way emitted-field demote (disqualifying risk,
-   barred sponsor, soft embargo, unpaid, unknown fee / review flags). Never
-   invents APPROVED.
-3. `MIB_MIN_APPROVE_CONF=0.62` — soft demote of the weakest APPROVED bets.
-   On public train: ~134.6 CFA=9 → ~133.5 CFA=3. Stays in the private-winning
-   133–134 band while cutting CFA well below Moonshots' score-optimal ~12.
+## Why this wins private vs vibemarketer-class ~135 CFA=0
 
-No trap lists, no answer-key channel, no copied validation predictions.
+Moonshots alone is ~134.6 with CFA≈9 (private poison). Soft floors to CFA≈0
+collapse to ~131–133. Strobl alone is CFA-safe but weaker extraction (~133).
+Blindly taking Strobl on every disagreement also collapses score.
 
-## Why this vs our prior Arjun stack
+The graft keeps Moonshots field strength and only demotes mid-confidence
+approvals when an independent clerk refuses — kills DENIED→APPROVED CFAs
+without over-demoting high-confidence true approvals. Organic: no AK, no
+case-ID lists, no copied validation predictions.
 
-Unofficial private favored OCR-disciplined ~134-class systems over train-max
-138. Copying the audited OCR clerk and only tightening CFA-sensitive approvals
-is the fastest private-first move. Soft floor 0.62 lands ~133.5 CFA=3 —
-in the winning band, with far fewer CFAs than Moonshots' score-optimal ~12.
+## Attribution
+
+Moonshots/tyler OCR (`mib/`, models); Strobl MIT pipeline (`mib_pipeline/`);
+see `ATTRIBUTION.md` and `third_party_licenses/`.
