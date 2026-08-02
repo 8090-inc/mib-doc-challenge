@@ -3,15 +3,14 @@
 ## Summary
 
 An offline, CPU-only, visible-evidence ensemble. On the 1,000 labeled training
-packets the submitted configuration scores **135.2622 / 150** with **1
+packets the promoted Docker replay scores **135.2615 / 150** with **1
 catastrophic false approval** (extraction 45.0411, classification 71.5800,
-calibration 18.6411, evaluated by the official `evaluate.py`). This is an
-in-sample development replay, not an unbiased private-test estimate. The retained
-exact-contract Docker receipt is **4.46 seconds/PDF** on a representative
-100-case run (4 vCPU, no network, read-only root); the measured incremental
-raster-note and JSON-calibration stages plus the latest operator timing place
-the complete refreshed route at **~5.5–5.6 seconds/PDF**, against the 6-second
-budget. The reviewer stage is
+calibration 18.6404, evaluated by the official `evaluate.py`). This is an
+in-sample development replay, not an unbiased private-test estimate. The
+retained final-image exact-contract Docker receipt is **5.135 seconds/PDF** on
+a representative 100-case run (4 vCPU, no network, read-only root), leaving
+14.4% measured headroom against the 6-second budget. Three earlier runs were
+4.46–4.55 seconds/PDF; all four outputs are byte-identical. The reviewer stage is
 additionally bounded at 3 seconds/PDF *by construction*. The 5,000 refreshed
 validation predictions pass the organizer validator with 0 missing case IDs
 and carry SHA-256
@@ -75,9 +74,9 @@ at will.
    always discarded and primary terminal decisions are never reopened.
 5. **Explicit adjudicator finding.** A bounded post-vote pass applies a
    decision only from a unique, conflict-free visible `Finding:` line. Text
-   findings are handled without extra OCR; raster findings use the existing
-   note reader only on current approvals/reviews. Extracted fields never
-   change.
+   findings are handled without extra OCR; raster findings use a 160-DPI
+   note-only reader on current approvals/reviews, avoiding a duplicate full
+   field-OCR sweep. Extracted fields never change.
 6. **Post-ensemble confidence calibration.** A frozen identity-free ensemble
    is serialized as plain JSON and runs after the final decision. It changes
    confidence only; it cannot mutate fields or adjudication.
@@ -114,6 +113,13 @@ no label, fitted threshold, case ID, PDF signature, model call, or additional
 OCR participates. This incremental rule cannot add a catastrophic false
 approval. The full 135.2622 headline still includes the pre-existing full-fit
 confidence calibrator and is not an unbiased private-test estimate.
+
+After promoting the fast raster reader and native visible-authority gate, a
+Docker replay preserved every adjudication and scored extracted field from
+that cached artifact. Fourteen confidence-only values differ, so the exact
+total is 135.2615 instead of 135.2622 (-0.00065); both report as 135.26. The
+same single catastrophic false approval remains. The promoted rule adds no
+fitted threshold, label lookup, case signature, or new decision heuristic.
 
 ## Measurement discipline
 
@@ -153,8 +159,8 @@ confidence calibrator and is not an unbiased private-test estimate.
 
 Offline (`--network none`), CPU-only, read-only root, writable `/tmp` only;
 the retained image is 687 MB (cap 4 GiB); model artifacts remain far below the
-250 MB/1 GB caps; one valid JSONL row per input; **18/18 focused decision-guard
-tests and 129/131 full-image tests pass**. The two existing image-sensitive
+250 MB/1 GB caps; one valid JSONL row per input; **27/27 focused authority/note
+tests and 137/139 full-image tests pass**. The two existing image-sensitive
 failures are the synthetic 90-degree raster read and crossed-out-stamp
 heuristic; neither is on the changed path. Vendored MIT/Apache components and
 model provenance are documented in
