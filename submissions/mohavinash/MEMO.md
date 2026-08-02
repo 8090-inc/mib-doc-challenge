@@ -3,14 +3,14 @@
 ## Summary
 
 An offline, CPU-only, visible-evidence ensemble. On the 1,000 labeled training
-packets the promoted Docker replay scores **135.2615 / 150** with **1
-catastrophic false approval** (extraction 45.0411, classification 71.5800,
-calibration 18.6404, evaluated by the official `evaluate.py`). This is an
+packets the conservative identity-guard replay scores **135.3299 / 150** with
+**0 catastrophic false approvals** (extraction 45.0500, classification
+71.6400, calibration 18.6399, evaluated by the official `evaluate.py`). This is an
 in-sample development replay, not an unbiased private-test estimate. The
-retained final-image exact-contract Docker receipt is **5.135 seconds/PDF** on
-a representative 100-case run (4 vCPU, no network, read-only root), leaving
-14.4% measured headroom against the 6-second budget. Three earlier runs were
-4.46–4.55 seconds/PDF; all four outputs are byte-identical. The reviewer stage is
+retained final-image verbatim-contract Docker receipt is **4.459 seconds/PDF**
+on a representative 100-case run (4 vCPU, no network, read-only root), leaving
+25.68% measured headroom against the 6-second budget. Its output is
+byte-identical to the prior release. The reviewer stage is
 additionally bounded at 3 seconds/PDF *by construction*. The 5,000 refreshed
 validation predictions pass the organizer validator with 0 missing case IDs
 and carry SHA-256
@@ -72,11 +72,17 @@ at will.
    disqualifying risk token. Inferred sponsor IDs, learned-only denials,
    reviews, low-confidence approvals, and failures abstain. Reviewer fields are
    always discarded and primary terminal decisions are never reopened.
-5. **Explicit adjudicator finding.** A bounded post-vote pass applies a
+5. **Explicit adjudicator finding and conservative identity guard.** A bounded post-vote pass applies a
    decision only from a unique, conflict-free visible `Finding:` line. Text
    findings are handled without extra OCR; raster findings use a 160-DPI
-   note-only reader on current approvals/reviews, avoiding a duplicate full
-   field-OCR sweep. Extracted fields never change.
+   reader on current approvals/reviews, avoiding a duplicate full field-OCR
+   sweep. The same OCR words support an approval-only guard when the current
+   applicant agrees with intake evidence but a sponsor attestation, scoped by
+   matching non-identity facts, names a materially different applicant. Any
+   Finding, registry, biometric, other identity source, unsafe text, or failed
+   page read makes the guard abstain. Its only transition is
+   `APPROVED -> NEEDS_REVIEW`; it adds `identity_conflict` and never replaces
+   the applicant name.
 6. **Post-ensemble confidence calibration.** A frozen identity-free ensemble
    is serialized as plain JSON and runs after the final decision. It changes
    confidence only; it cannot mutate fields or adjudication.
@@ -121,6 +127,17 @@ total is 135.2615 instead of 135.2622 (-0.00065); both report as 135.26. The
 same single catastrophic false approval remains. The promoted rule adds no
 fitted threshold, label lookup, case signature, or new decision heuristic.
 
+The final unresolved-identity guard then changed one labeled approval to
+review, recovering the last catastrophic false approval without denying the
+packet or changing its applicant name. The exact total is 135.3299. Its +0.06
+classification gain is the evaluator-scaled effect of changing that case from
+-4 raw units to +2 raw units; the remaining delta comes from the corrected
+`identity_conflict` extraction field and confidence recalibration. The exact
+production predicate made zero changes across all 1,011 current approvals in
+the unlabeled 5,000-packet set. Eight generic regression tests use arbitrary
+names and case ordering; runtime code contains no case ID, label read, or PDF
+signature.
+
 ## Measurement discipline
 
 - Hash-fold splits with an untouched fold for single reads; every lever
@@ -159,10 +176,8 @@ fitted threshold, label lookup, case signature, or new decision heuristic.
 
 Offline (`--network none`), CPU-only, read-only root, writable `/tmp` only;
 the retained image is 687 MB (cap 4 GiB); model artifacts remain far below the
-250 MB/1 GB caps; one valid JSONL row per input; **27/27 focused authority/note
-tests and 137/139 full-image tests pass**. The two existing image-sensitive
-failures are the synthetic 90-degree raster read and crossed-out-stamp
-heuristic; neither is on the changed path. Vendored MIT/Apache components and
+250 MB/1 GB caps; one valid JSONL row per input; **147/147 repository tests
+pass**. Vendored MIT/Apache components and
 model provenance are documented in
 `THIRD_PARTY_NOTICES.md` and under `vendor/`; the selection, gating, budget,
 and merge logic described above is original work in this repository.
