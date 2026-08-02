@@ -1,9 +1,9 @@
 # MIB Doc Challenge — Technical Memo
 
 **Approach:** deterministic generator inversion. No LLM, no VLM, no trained adjudicator.
-**Train:** 131.40/150 (extraction 45.80, classification 68.79, calibration 16.81).
-**Held out:** 132.40/150 on 300 cases the fitted tables never saw.
-**Runtime:** 2.90 s/PDF on the 5,000-case validation set under the official flags; image 0.23 GiB by `docker image inspect` (limit 4 GiB).
+**Train:** 132.04/150 (extraction 45.81, classification 69.32, calibration 16.91).
+**Held out:** 132.82/150 on 300 cases the fitted tables never saw.
+**Runtime:** 3.08 s/PDF on the 5,000-case validation set under the official flags; image 0.23 GiB by `docker image inspect` (limit 4 GiB).
 
 ## 1. Thesis, and the number that tests it
 
@@ -11,9 +11,15 @@ Every packet is the output of one deterministic program. Model *that program* an
 transfer; fit statistics of the training labels and you do not.
 
 The test: refit both fitted tables on a 700-case dev split, score the 300 cases they never
-saw. Fitting on all 1,000 instead is worth **+0.16 points** on those same cases. That is the
+saw. Fitting on all 1,000 instead is worth **+0.49 points** on those same cases. That is the
 entire quantity of train-fitting in this system. Published entries scoring ~135 on train
 report out-of-fold scores of 119–128.5.
+
+The three policy overrides (§5) come from a sweep over key granularity, support floor and EV
+margin **selected on the held-out split, never on train** (a floor of 8 is optimal in both
+directions: 6 overfits, 12 underfits). One caveat that cuts against us: a 300-case holdout has
+a bootstrap sd of 1.9 points, so the *absolute* held-out figure is not tight — every decision
+here rests on paired comparisons over identical cases, which are far tighter.
 
 **On scale.** `EVALUATION.md` says private labels carry an `unrecoverable_fields` column —
 generator-destroyed fields are removed from that case's extraction maximum — and that public
@@ -27,17 +33,17 @@ because it is the one anyone can reproduce.
 1. **Visibility-filtered scan** — every span classified visible/hidden (white fill, off-crop
    bbox, sub-legible size). Hidden text never enters a prediction (§4).
 2. **Dual-engine OCR** on raster pages: RapidOCR (raw + a flatten→ghost-gate→sharpen
-   restoration) and Tesseract. They fail differently; the union beats either.
+   restoration) and Tesseract, which fail differently. Page type falls back to label
+   co-occurrence when the header is destroyed — 21% of raster pages need it, and
+   misclassifying them made the rule engine think readable pages were unreadable.
 3. **Matched-filter reader** where both engines fail: deskew, anchor on known text (the Case
    ID comes from the filename, so each page carries its own calibration target), correlate
-   rendered closed-vocabulary candidates. Gated at 100% precision on train (117/117 note
-   verdicts, 98/98 biometric flag sets).
-4. **Analysis-by-synthesis** on degraded form pages — label-anchored shape matching. Output
-   only: it can fill a field nothing else read, but never reaches the rule engine, so it
-   cannot move a verdict.
-5. **Fusion** by *measured* source precedence, not the manual's ladder. The intake form is a
-   deliberate decoy channel: 89% accurate on names and 90% on sponsor IDs, against 100% for
-   the sponsor letter. Cross-page consensus overrides a single-support pick.
+   rendered closed-vocabulary candidates. 100% precision on train (117/117 note verdicts).
+4. **Analysis-by-synthesis** on degraded form pages, output-only: it can fill a field nothing
+   else read but never reaches the rule engine, so it cannot move a verdict.
+5. **Fusion** by *measured* source precedence, not the manual's ladder — the intake form is a
+   decoy channel (89% on names vs 100% for the sponsor letter). Cross-page consensus
+   overrides a single-support pick.
 6. **Rule engine** reproducing the generator's adjudication function, plus mined rules —
    staleness against the PDF `creationDate`, Wolf-1061c as a third embargo world for
    non-diplomatic visas (51/51), DIP-1 as a blanket exemption, and the subtlest: **the
@@ -70,12 +76,13 @@ errors are:
   contains only Case ID and Fee Status — the `$809` / `$0 + DIP-WAIVER` geometry that
   deterministically resolves fee status is *deleted*. Registry scans drop Registry Status;
   biometric scans drop Biometric confidence. Risk flags appear on biometric pages only.
-- Rasterisation therefore **removes evidence at generation time**: 89% of our risk-flag false
-  negatives have no flags line anywhere in the packet.
-- Independently confirmed by known-plaintext PSF fitting (each page's own label block as a
-  guide star): the damage kernel measures p90 14.1 px against a 6.8 px x-height. On a quarter
-  of pages the destruction is wider than the glyphs.
-- The born-digital channel is *provably* exhausted — round-trip equality means a complete
+- Rasterisation therefore **removes evidence at generation time**: 65% of the costly flag errors sit in packets with **no biometric or note page at all** —
+  and the generator assigns flags independently of whether it includes the slip (48.5% of
+  packets with one carry flags, 44.1% without).
+- Confirmed independently by known-plaintext PSF fitting: the damage kernel measures p90
+  14.1 px against a 6.8 px x-height — on a quarter of pages the destruction is wider than the
+  glyphs.
+- The born-digital channel is *provably* exhausted: round-trip equality means a complete
   reader cannot miss visible content, and it recovers zero fields we get wrong.
 
 Three independent instruments converge: the residual is missing information, not perception
@@ -87,7 +94,9 @@ failure.
 extraction fields are 90–98% correct and whose adjudication column is **inverted in 188/188
 cases**, aimed squarely at the −4 cell. We use none of it. Three defences:
 
-- **Structural** — span-level visibility filtering (colour, bbox, size).
+- **Structural** — span-level visibility filtering (colour, bbox, size). A literal
+  `[RISK PANEL MISSING]` marker counts as *not observed*, never as "no flags": asserting
+  absence from evidence of destruction is how a reader invents a clean record.
 - **Content** — the key is sometimes baked into raster *pixels*, where no structural filter
   can see it. Our OCR path was turning it into extraction candidates on three train cases
   before we caught it. Injection-shaped lines are now dropped from every OCR parser, with the
@@ -97,64 +106,68 @@ cases**, aimed squarely at the −4 cell. We use none of it. Three defences:
   answer key was still steering the decision. Removing it measured **+0.09 train / +0.06 held
   out** — it was not paying for itself.
 
-`lib/scan.py` still classifies hidden spans and nothing downstream consumes them. That is the
-point: we identify the key in order to exclude it. We also declined the adjacent grey
-channels — the injection's *length* alone would largely recover the missing flags, and raster
-skeleton variants leak its presence. Both are key-derived.
+`lib/scan.py` still classifies hidden spans and nothing downstream consumes them — we identify
+the key in order to exclude it. We also declined the adjacent grey channels: the injection's
+*length* alone would largely recover the missing flags, and raster skeleton variants leak its
+presence. Both are key-derived.
 
 ## 5. Failure modes, disclosed
 
-**30 catastrophic false approvals on train** (3.0% of cases, 9.8% of our approvals). We report
-this because `EVALUATION.md` makes it a minimum bar and the second tiebreaker.
+**26 catastrophic false approvals on train** (2.6% of cases, 8.8% of our 295 approvals). We
+report this because `EVALUATION.md` makes it a minimum bar and the second tiebreaker.
 
-- **25 of 30 are an unreadable risk flag** — truth carries `biohazard_red`, `active_warrant`,
+- **20 of 26 are an unreadable risk flag** — truth carries `biohazard_red`, `active_warrant`,
   `memory_tampering`, `planetary_embargo` or `illegible_biometrics`, and no flags line exists
-  anywhere in the packet. The other 5 are destroyed fee or sponsor evidence (one case's true
+  anywhere in the packet. The rest are destroyed fee or sponsor evidence (one case's true
   sponsor is revoked SPN-7331, where nothing was readable).
-- **None is asserted confidently** — max 0.752, mean 0.689, zero above 0.90. Calibration
+- **None is asserted confidently** — max 0.814, mean 0.718, zero above 0.90. Calibration
   already prices them.
 - **It is not a policy pattern.** We checked every approval sub-stratum — by fee imputation,
   missing-field count, and whether a flags line was observed — and APPROVED is the EV-argmax
-  in all of them. Forcing DENIED on our approvals costs **15.4 points** to remove 30 CFAs.
+  in all of them. Forcing DENIED on our approvals costs **15.8 points** to remove 26 CFAs.
 
-Field-level: **risk_flags 79.4%** (89% of false negatives have no evidence to read; false
-positives are zero). **fee_status 86.5%** (imputed `paid` is the conditional mode in every
-cell tested; 79 of 121 errors have no fee page). **sponsor_id / visa_class** errors are the
-intake decoy correctly read — adjudication is still right in 25/27 and 65/67 of those. Some
-40 further "errors" are correctly-priced EV hedges.
+Field-level: **risk_flags 83.3%** — only 2 false positives in 1,000 cases; the rest are
+absent evidence. **fee_status 88.1%** — 94 of 119 errors have no readable fee page at all, and
+`paid` is the conditional mode in every visa class including DIP-1 (50 paid vs 21 waived), so
+no smarter imputation exists. **sponsor_id 90.6% / visa_class 93.9%** — largely the intake
+decoy correctly read, and the verdict still lands correctly on 72/94 and 48/61 of those.
 
-The single fitted override is `no_visa → APPROVED`: 14 cases split 10/2/2, EV 5.29 for
-APPROVED against 2.86 — it wins even if the whole remainder were DENIED, and a disjoint
-700-case refit recovers it independently. Overrides are fitted at rule-path level only; a
-finer stratum also cleared the support floor and was worth +0.08 on train but **exactly zero**
-held out, so we dropped it.
+`assets/policy.json` holds three overrides, keyed at two granularities — the rule path, and
+the rule path plus four structural bits (which pages were readable). The *full* stratum was
+measured to give zero held-out gain, so it is not used:
+
+- `no_visa → APPROVED` — 14 cases split 10/2/2; EV 5.29 for APPROVED against 2.86, so it wins
+  even if the whole remainder were DENIED.
+- `conflict:0001 → APPROVED` — every page readable and flags observed, yet sources disagree.
+  That signature is the intake decoy channel, not a real problem.
+- `waived_nondip_clean:1000 → NEEDS_REVIEW` — a waived non-diplomatic fee with no biometric
+  page to verify flags against.
 
 ## 6. Robustness
 
 Hardened against failures that cost whole runs rather than points, each measured against
 adversarial corpora synthesised from the generator reconstruction:
 
-- **Worker crash** (SIGSEGV/SIGKILL mid-run) lost 53 of 61 rows, scoring 18/150. Now: per-case
-  isolation, a reconciliation pass, and a schema-valid backstop that imports nothing, so it
-  survives a broken module. Verified 61/61 rows under all three crash modes.
-- **Input delivered as `*.PDF`** produced zero rows — total wipeout from one character. Now
+- **Worker crash** (SIGSEGV/SIGKILL) lost 53 of 61 rows, scoring 18/150. Now per-case
+  isolation, a reconciliation sweep, and a schema-valid backstop that imports nothing — so it
+  survives a broken module. Verified 61/61 under all three crash modes.
+- **Input delivered as `*.PDF`** produced zero rows: a total wipeout from one character. Now
   case-insensitive, along with nested input directories.
-- **Runaway page** — per-case `SIGALRM`, a parent deadline, and a reconciliation sweep. The
-  5,000-case validation run finished in 4h02m with zero backstop rows.
+- **Runaway page** — per-case `SIGALRM` plus a whole-run deadline. Zero backstop rows fired on
+  the 5,000-case validation run.
 - For anyone building a monitor: **calibration is not a canary.** Missing cases are excluded
   from the Brier average, so a run losing most of its rows still reports healthy calibration.
 
 ## 7. With another week
 
-1. Replace the stratum tables with a soft-evidence rule engine propagating per-field
-   posteriors through the known rule function, so verdict probability and confidence come from
-   one object rather than two fitted tables.
-2. Push analysis-by-synthesis into the rule path under a precision gate — output-only today
-   specifically so it cannot move a verdict.
-3. More adversarial validation of the batch-constant miner: it is the main defence if the
-   private set redraws the revoked-sponsor table, and it is deliberately conservative — on a
-   batch too small to establish a frequency signature it returns nothing and defers to the
-   shipped set.
+1. **A better reader for degraded rasters** — the only headroom left. Every *inference* route
+   is measured shut: fusion is optimal to within 0.15 points over its own candidates,
+   calibration reliability is 0.001, and 93% of field errors have no correct candidate
+   anywhere in the reader output. Analysis-by-synthesis is not that route: head-to-head on
+   disagreements it loses 89 to 8, so it stays output-only.
+2. Replace the two stratum tables with a soft-evidence rule engine propagating per-field
+   posteriors through the known rule function, so the verdict probability and the confidence
+   come from one object rather than two fitted tables.
 
 ## 8. Reproducing
 
