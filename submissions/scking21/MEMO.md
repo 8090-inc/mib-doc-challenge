@@ -14,6 +14,24 @@ blended with the deterministic posterior, fitted output defaults for
 closed-vocabulary fields the pipeline could not read, and a post-decision
 correctness calibrator. All three are described below.
 
+## Applicant-name leakage follow-up
+
+The follow-up solution commit
+[`2da6eac`](https://github.com/scking21/mib-solution/commit/2da6eac5b0013b49d19347f788691358d4efc24d)
+makes the open-vocabulary name extractor fail closed at two narrow boundaries:
+it rejects a candidate that is an exact closed-vocabulary value or begins with
+one, and it treats the biometric headings `Observed`, `Match`, and `Spectres`
+as neighboring-field text. The scan then continues, so a later real name is
+still recoverable.
+
+On the PR #31 validation artifact, this removes all four reported bad classes.
+`Titan Freeport` and `Luyten-b Oriul Ixokesh` become blank; rejecting the bad
+window exposes the valid names `Tekquell Veequell` and `Veemora Veerix` in the
+other two packets. The updated submission changes exactly four
+`applicant_name` fields and zero other fields. It validates as 5,000/5,000
+records with no missing case IDs. The public training-name regression preserves
+all 1,000/1,000 nonblank names.
+
 **This number is not the number the leaderboard scores, and it understates us.**
 `EVALUATION.md:117` removes from each case's extraction maximum any field whose
 visible evidence was cut out, washed out, torn away, or present only in untrusted
@@ -62,11 +80,12 @@ check a candidate against, and its Title-Case pattern is the exact shape of a
 neighbouring label. Where the name was blank the window slid onto the next label
 and returned it: 136 of 4,690 non-blank names in an earlier build read `Species
 Code`, `Home World`, or an OCR-damaged variant such as `Species Home Workt`.
-Candidates containing any field-label word are now skipped and the scan
-continues to the next window and then to the attestation sentence. No true
-training name contains such a word in any position, so the rule discards nothing
-the corpus relies on, and an unreadable name yields a blank that widens the
-posterior instead of a confident wrong answer.
+Candidates containing any field-label word, biometric heading word, or a
+closed-vocabulary value/prefix are now skipped and the scan continues to the
+next window and then to the attestation sentence. No true training name is
+rejected by these predicates: the public-name probe preserves 1,000/1,000
+nonblank names. An unreadable name yields a blank that widens the posterior
+instead of a confident wrong answer.
 
 **Policy is declarative; decisions are score-aware.** `rules/policy.yaml` orders
 named terminals and `mib/policy.py` implements one predicate per terminal.
