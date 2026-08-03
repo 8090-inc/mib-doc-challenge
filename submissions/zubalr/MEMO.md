@@ -253,6 +253,20 @@ that repairs a garbled `Observed flags:` label under the OCR-aware edit distance
 and matches the value by its trailing component recovers 2 of 60 sampled misses
 at 100% precision, which is the true size of the recoverable slice.
 
+**The false approvals are uncertainty, not overconfidence.** Twelve packets are
+approved where the truth is a denial. Ten of them are packets whose disqualifying
+flag sits on a risk panel that no engine could read, which is the same residual
+described above rather than a separate policy failure. All twelve are emitted at
+confidence between 0.52 and 0.68, so the system reports them as marginal calls;
+none is a confident approval of a plainly disqualified packet.
+
+Buying that count down was priced out of fold rather than assumed. Demoting
+approvals below a confidence threshold removes false approvals at a cost of
+roughly 0.07 to 0.15 total points each, and the cheapest setting still costs
+classification score. Since a lower classification score is itself the first tie
+breaker, spending it to improve the second is self-defeating, and the shipped
+system keeps the expected-value boundary where the payoff matrix puts it.
+
 **Sentinel collisions are a recurring hazard.** `fee_status` had a value,
 `unknown`, that was also the internal marker for "no trusted evidence". The two
 were indistinguishable downstream, so a receipt that plainly stated `unknown`
