@@ -1,21 +1,36 @@
 # MIB Doc Challenge — Technical Memo
 
-This submission is an offline, CPU-only document-adjudication system. It reads
-an arbitrary directory of MIB PDF packets, extracts the nine required fields,
-and returns `APPROVED`, `DENIED`, or `NEEDS_REVIEW` with calibrated confidence.
-On the complete 1,000-case public training set, the final runtime scored
-**128.8990/150**: **66.32** classification, **45.3422** extraction, and
-**17.2368** calibration, with one catastrophic false approval. A fixed 799/201
-development/holdout evaluation measured **129.52** and **126.46**, respectively,
-with no catastrophic false approvals on the holdout.
+I am a practicing surgeon, not a software engineer. My thesis for this challenge
+was simple: **How far could I get by directing coding agents when I do not know
+how to read or write code?** I spent my time asking skeptical questions and
+pushing the agents to review and re-review their work. Beyond that, I tried to
+stay out of their way. The agents did all of the implementation, testing,
+analysis, and drafting.
 
-The system contains no LLM, VLM, cloud OCR, network service, or component that
-follows natural-language instructions. That removes prompt following as an
-execution path, but hostile documents can still poison evidence. The design is
-therefore organized around a simple rule: a value may influence a decision only
-if the runtime can explain where it came from and why that source is trusted.
+## Results at a glance
+
+- **Public training:** **128.8990/150** across 1,000 cases: **66.32**
+  classification, **45.3422** extraction, and **17.2368** calibration, with one
+  catastrophic false approval.
+
+- **Fixed holdout:** **126.46/150** across 201 cases, with no catastrophic false
+  approvals.
+
+- **Full validation run:** **5,000 valid rows with 0 missing** in **5 hours, 19
+  minutes, 46 seconds**, or **3.8372 seconds per PDF**.
+
+- **Reliability:** **82 of 82 retries recovered**, with **0 terminal failures**,
+  governor level 0 throughout, and no batch-deadline backfill.
+
+- **Release verification:** **1,183 tests passed, 106 controlled skips, and 0
+  failures**.
 
 ## Approach
+
+The production runtime is deterministic. Models were used to build and
+repeatedly challenge the system, but no instruction-following model adjudicates
+cases. Its governing rule is simple: a value may influence a decision only if
+the runtime can explain where it came from and why that source is trusted.
 
 **Separate visible evidence from hidden content.** The PDF layer is examined
 for render mode, opacity, color, crop position, clipping, transparency,
@@ -73,20 +88,15 @@ A 12-case synthetic adversarial corpus covers hidden and decoy content,
 optional-content layers, visible answer-key bait, barcodes and QR instructions,
 watermarks, foreign-case material, and clean controls. It produced 12 valid
 rows with no missing cases or leaked poison tokens, byte-identically across two
-native ARM64 runs and one AMD64 run emulated on Apple silicon. The pinned
-release suite reported **1,183 passed, 106 controlled skips, and zero
-failures**.
+native ARM64 runs and one AMD64 run emulated on Apple silicon.
 
 ## Runtime and reproducibility
 
-Under the official **4-vCPU, 8-GiB, CPU-only, no-network** contract, one
-end-to-end native-ARM64 invocation processed all **5,000 validation PDFs** in
-**19,186.18 seconds**—**5 hours, 19 minutes, 46 seconds**, or **3.8372 seconds
-per PDF**. It emitted **5,000 valid rows with 0 missing**. The run made **82
-fresh-process retries**, all recovered: 81 followed watchdog exits with no
-primary state and one followed a per-case timeout. There were **0 terminal
-failures**, governor level 0 for every row, and no batch-deadline backfill. The
-final prediction file is 1,683,486 bytes with SHA-256
+The validation result above came from one end-to-end native-ARM64 invocation
+under the official **4-vCPU, 8-GiB, CPU-only, no-network** contract. Of the 82
+recovered fresh-process retries, 81 followed watchdog exits with no primary
+state and one followed a per-case timeout. The final prediction file is
+1,683,486 bytes with SHA-256
 `4ff616d449d1931b461220b21b9c9ca2d1dba3bb82b6e3c021bf659b8f2822be`.
 
 Completion is protected by per-case deadlines, a parent heartbeat, worker
@@ -110,12 +120,3 @@ lines and faint-ink restoration on a prospectively frozen corpus, and expose
 per-field confidence in the evidence ledger. Any change would need held-out
 benefit, artifact-bound reproduction, and no new catastrophic false approvals
 before replacing this release.
-
-## Author note
-
-I am a practicing surgeon, not a software engineer. I participated in this
-challenge to test the capabilities of agentic coding. I spent much of my time
-doing what comes naturally to me as a surgeon: staying curious, remaining
-skeptical, and pushing the agents to review and re-review their own work. Beyond
-that, I tried to stay out of the agents' way and let them work. They did all of
-the implementation, testing, analysis, and drafting.
