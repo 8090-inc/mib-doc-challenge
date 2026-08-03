@@ -22,51 +22,33 @@ testing, analysis, and drafting.
 
 ## Approach
 
-The production runtime is deterministic. Models were used to build and
-repeatedly challenge the system, but no instruction-following model adjudicates
-cases. Its governing rule is simple: a value may influence a decision only if
-the runtime can explain where it came from and why that source is trusted.
+The runtime follows one rule: a value can affect the result only when the system
+can trace it to evidence a reviewer could see and explain why that source is
+trusted.
 
-**Separate visible evidence from hidden content.** The PDF layer is examined
-for render mode, opacity, color, crop position, clipping, transparency,
-geometry, font context, and paint order. Untrusted regions are overwritten
-before enhancement or OCR so contrast repair cannot bring hidden text back into
-view. The runtime does not parse hidden verdict direction. Hidden values never
-populate output fields and never support approval or denial; generic
-hidden-content metadata may only lower trust, narrow a case to review, or
-contribute to confidence calibration.
+- **Treat the PDF as hostile.** Hidden, clipped, and transparent regions are
+  masked before OCR or image enhancement. Their presence may lower confidence
+  or trigger review, but their contents can never fill a field or create a
+  decision.
 
-**Recover evidence through independent channels.** RapidOCR begins with a
-lower-resolution pass and escalates when decision-relevant fields remain
-missing. Native PDF text, masked page renders, targeted pixel readers, and an
-authorized raw-scan view remain distinct evidence sources. The raw-scan path is
-available only when resource identity, geometry, crop, rotation, paint, and
-compositing checks bind the pixels to the page a viewer sees. Otherwise it
-abstains or uses a new composited render. Parsed values are constrained by the
-field schema, closed vocabularies, plausibility checks, source rank, and
-cross-page agreement.
+- **Read through independent channels.** Native PDF text, masked page renders,
+  targeted pixel readers, and a tightly gated raw-scan path remain separate.
+  Values must pass schema, plausibility, and cross-page checks; disagreements
+  remain attached to the record rather than being silently resolved.
 
-**Preserve authority and provenance.** A visible adjudicator stamp or signed
-manual note can outrank ordinary fields, but only on an accepted note surface.
-Authority originating in native PDF text must also be reproduced by an exact
-250-DPI composited raster/OCR read. Cancellation requires both a viewer-visible
-word and a visible stroke; negated or ambiguous authority cannot create an
-approval. Foreign-case pages are quarantined, conflicts stay attached to the
-record, and fields change only when the document contains explicit correction
-text.
+- **Respect visible authority.** A visible adjudicator stamp or signed
+  correction can outrank ordinary fields, but only on an accepted note surface.
+  Authority found in native PDF text must also appear in a 250-DPI composited
+  raster/OCR read. Ambiguous, negated, cancelled, or foreign-case material
+  cannot create an approval.
 
-**Adjudicate first, then calibrate.** Deterministic policy applies the field
-manual and label-supported exceptions. Every ordinary approval is checked
-against the exact fields that will be emitted. The second evidence ledger may
-corroborate a result or move it toward a safer outcome, but it cannot create an
-approval by itself. Once the decision is fixed, an out-of-fold
-logistic/isotonic model estimates confidence from evidence quality and decision
-path. Expected-value analysis was used to compare candidate policies during
-development; it is not part of the production decision route.
+- **Decide first, then calibrate.** Deterministic policy produces
+  `APPROVED`, `DENIED`, or `NEEDS_REVIEW`. Only afterward does an out-of-fold
+  model estimate confidence; it cannot change the decision or manufacture an
+  approval.
 
-This architecture is deliberately conservative. When decisive visible
-evidence is absent, `NEEDS_REVIEW` is preferable to filling gaps from a hidden
-surface, a filename-specific rule, or a generator prior.
+When decisive visible evidence is missing, the system returns `NEEDS_REVIEW`
+rather than guessing from hidden content, filenames, or generator patterns.
 
 ## Evaluation and failure boundary
 
