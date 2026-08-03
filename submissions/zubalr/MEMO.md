@@ -4,10 +4,10 @@
 
 | Section | Training set | Model-fold diagnostic |
 | --- | ---: | ---: |
-| Extraction | 45.31 / 50 | 45.31 / 50 |
+| Extraction | 45.37 / 50 | 45.37 / 50 |
 | Classification | 74.45 / 80 | 68.82 / 80 |
 | Calibration | 18.07 / 20 | 16.81 / 20 |
-| Total | **137.83 / 150** | 130.62 / 150, SE 0.12 |
+| Total | **137.89 / 150** | 130.62 / 150, SE 0.12 |
 | Mean confidence Brier | 0.0482 | 0.0797 |
 | Catastrophic false approvals | 12 | 20.6 |
 
@@ -121,6 +121,18 @@ are byte-identical with and without them. Corroboration for a recognition box
 must come from the primary engine, so the fallback engine cannot promote its own
 reading over a primary one through this path.
 
+A newer generation of the same recogniser family, PP-OCRv6 Small, runs last and
+only where the pipeline resolved nothing at all and a corpus prior would
+otherwise be printed. It is kept as a separate session rather than a
+replacement, so the readings the pipeline already trusts are never re-litigated
+by a second model and a regression in one generation cannot rewrite the other's
+output. A field is filled only when every qualifying candidate in the packet
+agrees, and only when the value survives the same structural checks any other
+reading faces: a name must land exactly on the roster, a closed vocabulary must
+snap, a sponsor id must match its shape. On packets carrying an injection signal
+it does not run. Its worst case is therefore replacing one guess with another,
+and it recovered 11 fields with no regressions for about 0.15 seconds per PDF.
+
 Applicant identity has a separate output-only repair for the documented
 multiple-applicant trap. When there is no manual correction and the packet has
 one unambiguous visible `Registry Name`, that identity is printed instead of a
@@ -224,12 +236,22 @@ flags, which is why it is scored, and why the residual above is a real loss
 rather than a gap in coverage.
 
 That loss is not recoverable from the packets. The most commonly missed flag,
-`illegible_biometrics` (102 cases), is also the most plausibly derivable, since
+`illegible_biometrics` (87 cases), is also the most plausibly derivable, since
 it ought to follow from failing to read the biometrics. It does not: conditioning
 on an unreadable biometric confidence gives 22.5% incidence against a 22.3% base
 rate, so the failure to read carries no information about whether the flag is
 set. Absence of a readable page is not evidence of a clean record, and the
 pipeline does not treat it as one.
+
+Two checks bound how much of this residual is a parsing gap rather than damage.
+Sampling the packets that emitted nothing, the biometric slip is legible enough
+to yield even its own page title on a small minority; the rest are degraded past
+the point where any label on them can be located. And where the slip does
+survive, the panel row sometimes reads `[RISK PANEL MISSING]` -- the value was
+never printed on the document, so no recognition model can recover it. A rule
+that repairs a garbled `Observed flags:` label under the OCR-aware edit distance
+and matches the value by its trailing component recovers 2 of 60 sampled misses
+at 100% precision, which is the true size of the recoverable slice.
 
 **Sentinel collisions are a recurring hazard.** `fee_status` had a value,
 `unknown`, that was also the internal marker for "no trusted evidence". The two
@@ -262,11 +284,21 @@ by accident and was one of the larger single gains in the project. The same
 pattern plausibly exists in other fields, and the audit is cheap relative to its
 payoff.
 
-**Risk-panel image recovery.** By far the highest-value target, worth several
-points if solved, and the reason the current ceiling sits where it does. It
-needs a specialized image model for damaged panels rather than another general
-OCR pass. The independent fallback engine recovers ordinary fields well but
-adds almost no missing risk flags.
+**Risk-panel image recovery.** The highest-value target, worth several points if
+solved, and the reason the current ceiling sits where it does. It needs a
+specialized image model for damaged panels rather than another general OCR pass:
+a third general engine recovers ordinary fields well and adds almost no missing
+risk flags, because the panels that defeat two engines are degraded past the
+point where a label can be located at all. The ceiling on that work is lower
+than the residual suggests, since some surviving panels state that the value was
+never recorded.
+
+**The nine fields do not determine the decision.** Given the *true* field values,
+the hand-built policy reaches 68.95/80 held out while a learned model on those
+same values reaches 77.87/80 with no false approvals. The gap is not extraction
+and not calibration: it is that a single path label collapses nine values into
+one state. A richer policy representation, fitted on true fields and applied to
+extracted ones, is the lever I would reach for before any further OCR work.
 
 **Cross-corpus calibration validation.** The classifier uses extraction quality
 and damage features, but only labeled public packets are available for checking
@@ -280,8 +312,12 @@ RapidOCR, NumPy, and scikit-learn. No LLM, VLM, cloud OCR service, network
 request, or API key is used. Both figures below are measured, not projected,
 under the submission constraints (`--network none --cpus 4 --memory 8g
 --read-only --tmpfs /tmp`): the 1,000 public packets ran in 39m09s, 2.35s per
-PDF, and the 5,000 validation packets in 3h49m, 2.76s per PDF. Both are inside
+PDF, and the 5,000 validation packets in 4h07m, 2.96s per PDF. Both are inside
 the 6s per-PDF budget, and the validation total sits against an 8h20m limit.
+
+The image is also reproducible run to run: two independent passes over the same
+100 packets produced byte-identical output. That matters because the score comes
+from re-running the image, not from the submitted file.
 
 The adjudicator must be fitted on evidence extracted **inside the image**. The
 container's Tesseract and the host's do not read damaged scans identically --

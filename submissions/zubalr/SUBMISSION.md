@@ -19,15 +19,15 @@ docker run --rm --network none --cpus 4 --memory 8g --read-only --tmpfs /tmp \
 
 ## Public-data results
 
-The Docker image scores **137.83 / 150** on the complete public training set
+The Docker image scores **137.89 / 150** on the complete public training set
 under the official evaluator.
 
 | Section | Training set |
 | --- | ---: |
-| Extraction | 45.31 / 50 |
+| Extraction | 45.37 / 50 |
 | Classification | 74.45 / 80 |
 | Calibration | 18.07 / 20 |
-| Total | **137.83 / 150** |
+| Total | **137.89 / 150** |
 | Mean confidence Brier | 0.0482 |
 | Catastrophic false approvals | 12 |
 
