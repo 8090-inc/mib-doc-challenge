@@ -2,9 +2,12 @@
 
 ## Solution repository
 
-**Public repo:** https://github.com/patchg/mib-doc-solution
+**Public repo:** https://github.com/patchg/mib-doc-solution  
 
-*(If the URL differs after you create the repo, update this line before opening the PR.)*
+Includes:
+- `Dockerfile` + `run.sh` (two-arg offline contract)
+- **MIT `LICENSE` at repository root**
+- v12.1 freeze pipeline (Tesseract + rules, no network)
 
 ## Docker
 
@@ -22,21 +25,20 @@ docker run --rm \
   mib-submission /input /output/predictions.jsonl
 ```
 
-## Freeze summary
+## Freeze summary (public train labels)
 
 | Item | Value |
 |------|-------|
 | Version | v12.1 |
-| Train score (public labels) | **122.74 / 150** |
+| Train score | **122.74 / 150** |
 | Catastrophic FA | **0** |
-| Throughput | **~3.98 s/PDF** (4 vCPU, challenge flags) |
+| Throughput | **~3.98 s/PDF** under challenge Docker flags |
 | Image size | ~190 MiB |
-| Stack | Tesseract + PyMuPDF + rule policy (offline) |
 
 ## This folder
 
 | File | Contents |
 |------|----------|
-| `predictions.jsonl` | Validation-set predictions (5 000 cases) |
+| `predictions.jsonl` | Validation-set predictions (5000 cases) |
 | `MEMO.md` | Technical memo |
 | `SUBMISSION.md` | This file |
