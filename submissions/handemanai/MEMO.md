@@ -16,14 +16,9 @@ testing, analysis, and drafting.
 - **Fixed holdout:** **126.46/150** across 201 cases, with no catastrophic false
   approvals.
 
-- **Full validation run:** **5,000 valid rows with 0 missing** in **5 hours, 19
-  minutes, 46 seconds**, or **3.84 seconds per PDF**.
-
-- **Reliability:** **82 of 82 retries recovered**, with **0 terminal failures**,
-  governor level 0 throughout, and no batch-deadline backfill.
-
-- **Release verification:** **1,183 tests passed, 106 controlled skips, and 0
-  failures**.
+- **Full validation run:** **5,000 valid rows, 0 missing, and 0 terminal
+  failures** in **5 hours, 19 minutes, 46 seconds**, or **3.84 seconds per
+  PDF**.
 
 ## Approach
 
