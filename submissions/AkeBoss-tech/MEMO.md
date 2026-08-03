@@ -36,9 +36,9 @@ scored above 131 out of 150 with zero catastrophic false approvals.
 
 The attached validation artifact contains all 5,000 required records and was
 generated in the official offline Docker configuration (one 4-vCPU, 8-GiB
-instance; no network; read-only input). It completed in 7,034.87 seconds, or
-1.407 seconds per PDF. Its SHA-256 is
-`ae774998a62e6318b5eb9a2f2ebb367535a4e75c512eba75e191a1b08dff68c0`.
+instance; no network; read-only input). It passed the official complete-manifest
+validation check with zero missing case IDs. Its SHA-256 is
+`34f96b53d0bd9705244a3a937dae337119f9af61b17247c80dbc15eff1842186`.
 Validation labels are private, so this confirms completeness and runtime rather
 than a hidden validation score.
 
