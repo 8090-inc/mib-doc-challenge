@@ -1,23 +1,25 @@
 # MIB Doc Challenge — Technical Memo
 
-I am a practicing surgeon, not a software engineer. My thesis for this challenge
-was simple: **How far could I get by directing coding agents when I do not know
-how to read or write code?** I spent my time asking skeptical questions and
-pushing the agents to review and re-review their work. Beyond that, I tried to
-stay out of their way. The agents did all of the implementation, testing,
-analysis, and drafting.
+I am a practicing surgeon, not a software engineer. I entered this challenge to
+test a narrow thesis: **Could I direct coding agents toward a result I was
+willing to be accountable for without being able to read or write the code?**
+My role was to define the objective, question the output, and decide what
+evidence was good enough to trust. Because I could not inspect the implementation
+myself, I judged it by its behavior: held-out performance, adversarial tests,
+documented failures, and a complete 5,000-document run. The agents did all of
+the implementation, testing, analysis, and drafting.
 
 ## Results at a glance
 
-- **Public training:** **128.8990/150** across 1,000 cases: **66.32**
-  classification, **45.3422** extraction, and **17.2368** calibration, with one
+- **Public training:** **128.90/150** across 1,000 cases (**66.32**
+  classification, **45.34** extraction, and **17.24** calibration), with one
   catastrophic false approval.
 
 - **Fixed holdout:** **126.46/150** across 201 cases, with no catastrophic false
   approvals.
 
 - **Full validation run:** **5,000 valid rows with 0 missing** in **5 hours, 19
-  minutes, 46 seconds**, or **3.8372 seconds per PDF**.
+  minutes, 46 seconds**, or **3.84 seconds per PDF**.
 
 - **Reliability:** **82 of 82 retries recovered**, with **0 terminal failures**,
   governor level 0 throughout, and no batch-deadline backfill.

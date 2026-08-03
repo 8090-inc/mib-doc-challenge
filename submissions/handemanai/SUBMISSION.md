@@ -112,10 +112,7 @@ including PyMuPDF's AGPL-3.0 terms and the non-hash-locked rebuild boundary, is
 recorded in the source repository's
 [`NOTICE.md`](https://github.com/handemanai/mib-doc-challenge-solution/blob/4313d28b34abc4cef4c89586060f4d3d34848c88/NOTICE.md).
 
-I am a practicing surgeon, not a software engineer. I entered this challenge to
-ask how far I could get by directing coding agents when I do not know how to
-read or write code. I spent my time asking skeptical questions and pushing the
-agents to review and re-review their work. Beyond that, I tried to stay out of
-their way. The agents did all of the implementation, testing, analysis, and
-drafting. `MEMO.md` explains the system, its remaining failure boundary, and
-what I would do with another week.
+I am a practicing surgeon, not a software engineer. The agents did all of the
+implementation, testing, analysis, and drafting. `MEMO.md` explains the thesis,
+my role, the system's remaining failure boundary, and what I would do with
+another week.
