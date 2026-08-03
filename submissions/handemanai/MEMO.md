@@ -1,11 +1,10 @@
 # MIB Doc Challenge — Technical Memo
 
-I am a practicing surgeon, not a software engineer. I entered this challenge to
-test a simple question: **Have coding agents advanced far enough that someone
-who cannot read or write code can still produce a competitive result through
-persistence, high standards, and close attention to detail?** My role was to
-keep pushing—to ask skeptical questions, demand repeated review, and refuse to
-accept work that had not been tested. The agents did all of the implementation,
+I am a practicing surgeon, not a software engineer. I cannot read or write code.
+I entered this challenge to test a simple question: **If AI can write the code,
+are curiosity and persistence enough to compete?** My role was to keep
+pushing—to ask skeptical questions, demand repeated review, and refuse to accept
+work that had not been tested. The agents did all of the implementation,
 testing, analysis, and drafting.
 
 ## Results at a glance
