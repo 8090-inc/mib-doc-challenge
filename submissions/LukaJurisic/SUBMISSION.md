@@ -1,7 +1,7 @@
 # MIB Doc Challenge — Submission
 
 - **Solution repository (public, contains `Dockerfile`):** <https://github.com/LukaJurisic/mib-doc-challenge-solution>
-- **Generation receipt:** [`docs/V6_S4_BASELINE_GENERATION_RECEIPT.json`](https://github.com/LukaJurisic/mib-doc-challenge-solution/blob/codex/v6-s-distributed-submission/docs/V6_S4_BASELINE_GENERATION_RECEIPT.json)
+- **Generation receipt:** [`docs/V6_S4_BASELINE_GENERATION_RECEIPT.json`](https://github.com/LukaJurisic/mib-doc-challenge-solution/blob/9e140db7f2ca88d3af569d129df869164e2efdfa/docs/V6_S4_BASELINE_GENERATION_RECEIPT.json)
 - **Current submitter:** Luka Jurisic (`LukaJurisic`)
 - **Attributed technical origin:** Calling Moonshots,
   [`callingmoonshots/mib-doc-challenge-solution@9ed5ed360ae40053dfee80bff09eef29a83a3980`](https://github.com/callingmoonshots/mib-doc-challenge-solution/tree/9ed5ed360ae40053dfee80bff09eef29a83a3980)
@@ -63,8 +63,17 @@ failure modes, and what another week buys).
 
 ## Reproduce
 
+Run these commands from a checkout of the organizer challenge repository so its
+validation data and validator remain available. The executable prediction-code
+identity in the pinned solution release remains
+`7da47773b39609a4e162a5e1b448d5f5657436bc`.
+
 ```bash
-docker build -t mib-submission .
+git clone https://github.com/LukaJurisic/mib-doc-challenge-solution \
+  /tmp/mib-doc-challenge-solution
+git -C /tmp/mib-doc-challenge-solution checkout --detach \
+  9e140db7f2ca88d3af569d129df869164e2efdfa
+docker build -t mib-submission /tmp/mib-doc-challenge-solution
 docker run --rm --network none --cpus 4 --memory 8g --pids-limit 512 \
   --read-only --security-opt no-new-privileges \
   --tmpfs /tmp:rw,nosuid,nodev,size=2g \
@@ -73,7 +82,8 @@ docker run --rm --network none --cpus 4 --memory 8g --pids-limit 512 \
   mib-submission /input /output/predictions.jsonl
 python3 scripts/validate_submission.py \
   --submission /tmp/mib-out/predictions.jsonl \
-  --manifest data/validation_manifest.csv
+  --manifest data/validation_manifest.csv \
+  --require-complete
 ```
 
 ## Predictions
