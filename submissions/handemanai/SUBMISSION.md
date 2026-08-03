@@ -113,11 +113,9 @@ recorded in the source repository's
 [`NOTICE.md`](https://github.com/handemanai/mib-doc-challenge-solution/blob/4313d28b34abc4cef4c89586060f4d3d34848c88/NOTICE.md).
 
 I am a practicing surgeon, not a software engineer. I participated in this
-challenge to test the capabilities of agentic coding. I directed the agents by
-setting the priorities, asking them to research unfamiliar questions, requiring
-repeated skeptical reviews, and spending a great deal of time pushing them to
-look for hidden evidence, document traps, unsafe approvals, and brittle
-improvements. I asked questions, challenged conclusions, and decided what
-evidence was strong enough to act on. The agents did all of the implementation,
-testing, analysis, and drafting. `MEMO.md` explains the system, its remaining
-failure boundary, and what I would do with another week.
+challenge to test the capabilities of agentic coding. I spent much of my time
+doing what comes naturally to me as a surgeon: staying curious, remaining
+skeptical, and double-checking the work. Beyond that, I tried to stay out of the
+agents' way and let them work. They did all of the implementation, testing,
+analysis, and drafting. `MEMO.md` explains the system, its remaining failure
+boundary, and what I would do with another week.
