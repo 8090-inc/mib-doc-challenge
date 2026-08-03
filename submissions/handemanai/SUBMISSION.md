@@ -2,11 +2,10 @@
 
 **Public solution repository:** <https://github.com/handemanai/mib-doc-challenge-solution>
 
-This is an offline, CPU-only document-adjudication system. It recovers the nine
-required fields from adversarial PDF packets, applies deterministic policy, and
-emits `APPROVED`, `DENIED`, or `NEEDS_REVIEW` with calibrated confidence. It
-contains no LLM, VLM, cloud OCR, network service, API key, or component that
-follows document instructions.
+The linked repository contains the offline, CPU-only system that produced these
+predictions. It combines OCR and computer vision with a deterministic
+adjudication policy; it does not use an LLM, cloud service, or network access at
+inference time.
 
 ## Final artifact
 
@@ -28,34 +27,12 @@ were zero terminal failures, governor level 0 for every row, and no
 batch-deadline backfill. The official validator accepted all 5,000 records, and
 the full source/runtime/input/output binding and strict evidence census passed.
 
-## Approach and safety boundaries
-
-- **Visible evidence controls decisions.** Hidden spans are masked before image
-  enhancement and OCR. The runtime does not parse hidden verdict direction;
-  hidden values never populate fields or support approval or denial. Generic
-  hidden-content metadata may only lower trust, narrow to review, or contribute
-  to calibration.
-- **Evidence remains source-bound.** Native text, masked renders, targeted pixel
-  readers, and an authorized raw-scan view remain separate channels. A direct
-  scan read must be bound to the page a viewer sees; otherwise that channel
-  abstains or uses a fresh composited render.
-- **Authority is fail-closed.** Signed-note and stamp findings require an
-  accepted visible surface. Native-text authority also requires exact 250-DPI
-  raster/OCR corroboration. Foreign-case pages are quarantined, conflicts remain
-  explicit, and ambiguous cancellation cannot create an approval.
-- **Policy precedes confidence.** Deterministic rules adjudicate the emitted
-  fields first. An out-of-fold logistic/isotonic model then estimates confidence
-  from evidence quality. Expected-value analysis is development-only and does
-  not route production decisions.
-- **Completion is conservative.** Per-case deadlines, a parent heartbeat,
-  worker recycling after 48 durable cases, atomic checkpoints, bounded retries,
-  a batch governor, and a finalization reserve prevent one pathological PDF from
-  invalidating the batch. Anything unresolved becomes a valid `NEEDS_REVIEW`
-  row.
-
-Prediction code and model artifacts contain no validation-case answer table or
-case-specific runtime lookup. The container accepts arbitrary mounted input and
-output paths and ships no challenge labels or validation data.
+The container accepts arbitrary mounted input and output paths. It ships no
+challenge labels, validation data, validation-case answer table, or
+case-specific runtime lookup. The accompanying [`MEMO.md`](MEMO.md) explains the
+approach, failure boundary, and authorship experiment. The public repository's
+[`REVIEWER_GUIDE.md`](https://github.com/handemanai/mib-doc-challenge-solution/blob/main/docs/REVIEWER_GUIDE.md)
+maps its claims to source, tests, and artifacts.
 
 ## Published contract measurements
 
@@ -110,9 +87,12 @@ before emitting conservative fallbacks. No full-batch AMD64 throughput or
 cross-platform row-identity claim is made. Dependency and model provenance,
 including PyMuPDF's AGPL-3.0 terms and the non-hash-locked rebuild boundary, is
 recorded in the source repository's
-[`NOTICE.md`](https://github.com/handemanai/mib-doc-challenge-solution/blob/4313d28b34abc4cef4c89586060f4d3d34848c88/NOTICE.md).
+[`NOTICE.md`](https://github.com/handemanai/mib-doc-challenge-solution/blob/main/NOTICE.md).
 
-I am a practicing surgeon, not a software engineer. The agents did all of the
-implementation, testing, analysis, and drafting. `MEMO.md` explains the thesis,
-my role, the system's remaining failure boundary, and what I would do with
-another week.
+I am a practicing surgeon, not a software engineer. I cannot read or write
+code. I entered the challenge to test whether curiosity and persistence were
+enough to compete when AI wrote the code. I kept pushing, asked skeptical
+questions, and demanded repeated review; the agents did all of the
+implementation, testing, analysis, and drafting. The accompanying memo gives
+the full author note, the system's remaining failure boundary, and what I would
+do with another week.
