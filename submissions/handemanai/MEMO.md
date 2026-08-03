@@ -52,43 +52,35 @@ rather than guessing from hidden content, filenames, or generator patterns.
 
 ## Evaluation and failure boundary
 
-The remaining public-training catastrophic false approval is MIB-000865. Its
-visible intake scan reports XW-2 while the label is TRANSIT-7, and the labeled
-value was not recoverable through the frozen, audited visible-evidence
-channels. A broader corroboration rule removed that error but also demoted four
-correct approvals and reduced classification score. I retained the general
-policy rather than specialize around one case or use untrusted content. The
-larger residual risk is missing evidence: new layouts, faint ink, or absent
-flags can still force review or produce an incorrect extraction.
+The holdout result above had no catastrophic false approvals. Public training
+still contains one: MIB-000865. Its visible scan says XW-2 while the label says
+TRANSIT-7, and no trusted visible channel recovers the labeled value. A broader
+rule fixed that case but demoted four correct approvals and lowered the score,
+so the release keeps the general rule rather than special-casing one example.
+This exposes the main remaining risk: faint, missing, or unfamiliar evidence
+can still force review or produce an incorrect extraction.
 
-A 12-case synthetic adversarial corpus covers hidden and decoy content,
-optional-content layers, visible answer-key bait, barcodes and QR instructions,
-watermarks, foreign-case material, and clean controls. It produced 12 valid
-rows with no missing cases or leaked poison tokens, byte-identically across two
-native ARM64 runs and one AMD64 run emulated on Apple silicon.
+The hidden-content defenses were also tested on 12 synthetic adversarial cases
+containing decoy layers, visible answer-key bait, QR instructions, watermarks,
+foreign-case material, and clean controls. All 12 produced valid rows with no
+missing cases or leaked poison tokens, byte-identically across two native ARM64
+runs and one AMD64 run under emulation. This was a focused security check, not a
+claim of broad robustness.
 
 ## Runtime and reproducibility
 
-The validation result above came from one end-to-end native-ARM64 invocation
-under the official **4-vCPU, 8-GiB, CPU-only, no-network** contract. Of the 82
-recovered fresh-process retries, 81 followed watchdog exits with no primary
-state and one followed a per-case timeout. The final prediction file is
-1,683,486 bytes with SHA-256
-`4ff616d449d1931b461220b21b9c9ca2d1dba3bb82b6e3c021bf659b8f2822be`.
+The 5,000-case result above came from one end-to-end native-ARM64 run under the
+official **4-vCPU, 8-GiB, CPU-only, no-network** contract. The runtime made 82
+fresh-process retries; all recovered and none became a terminal failure. Case-level
+checkpoints, bounded retry, worker replacement, and a final time reserve are
+designed to prevent an individual failure from ending the batch.
 
-Completion is protected by per-case deadlines, a parent heartbeat, worker
-replacement after 48 durable cases, atomic checkpoints, one bounded retry per
-candidate, a 3,600-second retry wall, a batch governor, and a finalization
-reserve that emits conservative `NEEDS_REVIEW` rows for anything unresolved.
-
-The prediction-producing source is
-`4313d28b34abc4cef4c89586060f4d3d34848c88`, and its native-ARM64 source,
-image, configuration, input, evidence, and output binding passed. The AMD64
-image was built and tested under emulation, not on native x86 hardware. On an
-eight-case OCR-sensitive panel, adjudications matched across architectures,
-but fields differed on all eight and two AMD64 cases exhausted both timeout and
-retry before emitting conservative fallbacks. I therefore make no claim of
-full-batch AMD64 throughput or cross-platform row identity.
+The AMD64 image was built and tested only under emulation, not on native x86
+hardware. On an eight-case OCR-sensitive panel, decisions matched across
+architectures, but extracted fields differed on all eight and two AMD64 cases
+exhausted both timeout and retry before emitting conservative fallbacks. The
+release therefore makes no claim of native-AMD64 throughput or cross-platform
+row identity.
 
 ## With another week
 
