@@ -22,33 +22,28 @@ testing, analysis, and drafting.
 
 ## Approach
 
-The runtime follows one rule: a value can affect the result only when the system
-can trace it to evidence a reviewer could see and explain why that source is
-trusted.
+The hard part was not OCR. It was deciding what was allowed to count as
+evidence.
 
-- **Treat the PDF as hostile.** Hidden, clipped, and transparent regions are
-  masked before OCR or image enhancement. Their presence may lower confidence
-  or trigger review, but their contents can never fill a field or create a
-  decision.
+- **A PDF can contain conflicting representations.** Native text, the rendered
+  page, targeted pixel reads, and embedded scans are kept separate. A value is
+  used only when its source can be tied to what a reviewer would actually see.
 
-- **Read through independent channels.** Native PDF text, masked page renders,
-  targeted pixel readers, and a tightly gated raw-scan path remain separate.
-  Values must pass schema, plausibility, and cross-page checks; disagreements
-  remain attached to the record rather than being silently resolved.
+- **Hidden content can only reduce trust.** Hidden, clipped, and transparent
+  regions are masked before OCR or image enhancement. Their presence may lower
+  confidence or trigger review; their contents cannot fill a field or support
+  an approval or denial.
 
-- **Respect visible authority.** A visible adjudicator stamp or signed
-  correction can outrank ordinary fields, but only on an accepted note surface.
-  Authority found in native PDF text must also appear in a 250-DPI composited
-  raster/OCR read. Ambiguous, negated, cancelled, or foreign-case material
-  cannot create an approval.
+- **Corrections require visible authority.** A stamp or signed correction can
+  override ordinary fields only on an accepted note surface. Authority found
+  only in native PDF text must also survive a composited raster/OCR check.
 
-- **Decide first, then calibrate.** Deterministic policy produces
-  `APPROVED`, `DENIED`, or `NEEDS_REVIEW`. Only afterward does an out-of-fold
-  model estimate confidence; it cannot change the decision or manufacture an
-  approval.
+- **Confidence cannot change the decision.** Deterministic policy chooses
+  `APPROVED`, `DENIED`, or `NEEDS_REVIEW` first. An out-of-fold model then
+  estimates confidence without changing that outcome.
 
-When decisive visible evidence is missing, the system returns `NEEDS_REVIEW`
-rather than guessing from hidden content, filenames, or generator patterns.
+When trusted evidence is absent or conflicts remain unresolved, the system
+returns `NEEDS_REVIEW` rather than guessing.
 
 ## Evaluation and failure boundary
 
