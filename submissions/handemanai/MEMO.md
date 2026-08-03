@@ -1,47 +1,124 @@
 # MIB Doc Challenge — Technical Memo
 
-Measured on a fixed 799/201 split of the public training set, all tuning on the 799 and the 201 read only at milestones: **dev 129.52, holdout 126.46, zero catastrophic false approvals on holdout**, one documented irreducible false approval on dev.
+The offline, CPU-only final runtime scored **128.8990/150** on the complete
+1,000-case public training set: 66.32 classification, 45.3422 extraction, and
+17.2368 calibration, with one documented catastrophic false approval. An earlier
+internal fixed 799/201 checkpoint measured 129.52 on development and 126.46 on
+holdout, with zero holdout catastrophic false approvals. It uses no LLM or VLM,
+has no instruction-following component, and does not treat arbitrary document
+prose as executable commands.
 
-## Approach
+## System design
 
-Six layers, with every decision reconstructible from a per-case evidence ledger.
+The pipeline separates evidence recovery from adjudication. An optional ledger
+records final fields, source and rank, conflicts, fusion, decisions, and attempts.
 
-**Forensics before rasterization.** 21.6% of training packets carry a fake "answer key" as white-on-white or off-crop text. Spans are classified visible or hidden by render mode, opacity, colour and crop position, and hidden text is deleted *before* the page is rasterized — because scanned paper renders around 247 grey while invisible white is 255, so the contrast enhancement that washed-out pages require would otherwise resurrect the injection into the OCR stream. All 216 injections are wrong about the adjudication, and 106 flip a true denial into an approval. Hidden content is therefore never evidence; it is only a distrust signal, and one that can push exclusively *away* from approval.
+**1. Quarantine hidden content.** Public packets contain non-visible text,
+including planted answer-key material. The runtime classifies PyMuPDF-exposed
+spans by render mode,
+opacity, colour, crop, font context, clipping, transparency, geometry, and paint
+order. For the composited baseline, untrusted regions are overwritten before
+enhancement or OCR, so contrast repair cannot resurrect them. Direct embedded
+scan decoding instead requires viewer binding and otherwise falls back to a new
+composited render. The runtime does not parse hidden verdict direction. Hidden
+values never populate fields or support approval or denial; pattern metadata may
+only narrow to review or affect calibration.
 
-**Trap-masked OCR, then closed-vocabulary parsing.** RapidOCR with the en_PP-OCRv5 mobile recognizer (7.9 MB, chosen in a four-model end-to-end bake-off) runs at deliberately low resolution; packets still missing deny-relevant fields earn a full-resolution second pass, since the 6 s/PDF budget is an average and clean packets bank surplus for hard ones. Text is NFKC-sanitized so a homoglyph cannot slip past a parser. Every field but dates and IDs snaps to a small legal set — 12 species, 13 worlds, 5 visa classes, names as two tokens from a 144×144 syllable lexicon — and snap margin plus cross-page agreement become confidence features. Two channels most pipelines cannot see: a coloured vector line through a word is a manual cancellation, and across every training case a struck token is never its field's true value; and `Registry Status: EMBARGO REVIEW` blocks approvals, while `CLEAR` is deliberately not evidence, since 18 denied cases print it.
+**2. Read visible evidence through independent channels.** RapidOCR runs
+low-resolution first and escalates when decision-relevant fields remain missing.
+NFKC normalization, closed vocabularies, and plausibility checks constrain
+outputs. Manual cancellation requires a viewer-visible word and stroke, and
+negated authority is rejected. Accepted raw authority spellings remain bound to
+their canonical values so normalization aliases cannot evade matching strikes.
+Sanitization rebuilds rank-1 values, evidence, and conflicts together before
+strict binding. Ambiguous adverse cancellation can only narrow to review. This
+is conservative token/field provenance, not exact occurrence or page
+attribution. The baseline pixel observer decodes a raw embedded scan only when
+exact resource, geometry, crop/rotation, paint, and compositing checks bind its
+pixels to the viewer's page; otherwise it uses a new composited render. The
+independent native ledger abstains unless raw-scan authorization succeeds.
+Fusion may corroborate or narrow, but cannot create approval alone.
 
-**Direction-asymmetric ROI readers.** Five template-anchored readers recover values from damaged pixels that whole-page OCR abandons, and the asymmetry is the safety architecture. Readers whose firings can only move a case toward denial or review — a flag reader that never emits "none", an embargo-world reader that emits only embargo worlds — are structurally incapable of a catastrophic false approval, so they are allowed to be aggressive. Approval-adjacent reads face a higher bar: the fee reader's "paid" requires the "un" prefix region to be *positively clean* rather than merely unreadable, because "paid" is a substring of "unpaid" and that misread is exactly what the −4 penalty prices. Each direction ships only at 100% precision across the dev split, or not at all.
+**3. Adjudicate deterministically, then calibrate.** Field-manual rules include
+label-supported revoked-sponsor and embargo-world exceptions. Expected value
+compares policies offline, not in production. Approvals are checked against their
+emitted fields. A rank-1 finding may override lower-rank evidence only on an
+accepted note surface; native-text authority additionally requires exact
+250-DPI composited raster/OCR corroboration. Foreign-case pages are quarantined;
+native-only authority requires an exact body Case ID. Conflicts are recorded,
+and fields change only with explicit correction text.
+Afterward, an out-of-fold logistic/isotonic model calibrates confidence from
+evidence quality and decision path.
 
-**Two evidence ledgers, fused with provenance.** Scanned packets carry a second, independent stream: a native-resolution OCR pass over the embedded scan images builds its own ledger and is adjudicated by the same policy engine. Fusion is asymmetric — a native read may narrow or corroborate the baseline decision but can never mint an approval on its own — and a final post-fusion consistency check re-adjudicates every APPROVED row against the exact fields it will emit, so the submission cannot print an approval whose own printed evidence demands denial or review.
+## What measurement changed
 
-**A deterministic policy engine, built for a regenerated test set.** Field-manual rules plus mined ones: hard-embargo worlds, revoked sponsors beyond the manual's three, unpaid fees denying even DIP-1. The manual itself was tested, not transcribed: two of its stated rules are falsified by the training labels — "multiple review-only flags may combine into a denial" (24/24 such cases are NEEDS_REVIEW) and "waived is acceptable only for DIP-1 or a visible hardship waiver" (83 non-DIP waived cases, zero denied for it) — and both are deliberately unimplemented. Given true fields the engine reproduces 97.3% of training adjudications with zero approve/deny confusions. The staleness epoch is *shift-tracked* from the batch's 90th-percentile arrival date with a noise-calibrated deadband and a garble-filtered clamp: a naive tail statistic, we measured, can be dragged 20 months by fifteen year-garbled reads and mass-deny the batch.
+A historical internal census showed 31–41% of fallbacks already contained the
+true value in visible OCR: the parser had failed. Six repairs added about 2.4
+development points. A
+learned hedge resolver produced 32 new false approvals out of fold; opening
+approval with missing flags created 19. A 2.6-million-parameter OCR-correction
+model changed score only +0.04 on development and -0.05 on holdout, so it ships
+disabled. Joint name-grammar decoding shipped because it improved garbled names
+without adding a model or changing adjudication risk.
 
-**Decision theory and calibrated confidence.** Approve only when P(approved) > 1.5×P(denied) and that beats the review hedge; never omit a case. Confidence is an out-of-fold logistic calibrator over 18 evidence-quality features with per-decision-class isotonic correction.
+## Failure boundary and robustness
 
-## Measure before modelling
+One public-training false approval remains, MIB-000865. The visible intake scan
+reports XW-2 while the label is TRANSIT-7; the labelled value was absent from the
+audited visible-evidence channels. The documented broad review-only
+corroboration gate removed this error but demoted four correct approvals and
+reduced classification score, so I retained the general policy rather than
+specialize around a case identity or hidden surface. The larger
+residual is missing evidence: when a packet has no decisive flags surface,
+`NEEDS_REVIEW` is preferable to guessing from generator priors.
 
-The dominant residual was "field never read", and the obvious next move was a learned extractor. We measured first: was the true value already present in the visible text the pipeline had produced? Between 31% and 41% of fallbacks were *parser*-limited, and the examples were deterministic-code-shaped, not model-shaped. Six parser fixes were worth about +2.4 points, redirecting a planned week of ML into an afternoon.
+A 12-case synthetic adversarial corpus covers hidden or decoy content plus clean
+controls. Its output was byte-identical across
+two native ARM64 runs and one emulated AMD64 run, with 12 valid rows, no missing
+cases, and no leaked poison tokens. The runtime invokes no barcode or QR-decoding
+path. Per-case
+deadlines, a parent heartbeat watchdog, worker recycling, atomic checkpoints,
+and a batch governor protect completion. The supervisor reserves finalization
+time, signals all workers before a shared bounded reap, preserves durable state,
+and atomically emits conservative rows for anything unresolved. Governor level
+0 is tested as output-equivalent to the ungoverned path. Up to 128 failed-case
+candidates may receive one fresh-process retry, subject to an unchanged
+3,600-second retry wall and the finalization reserve. Full-batch byte identity is
+not claimed across scheduling, governor, architecture, or timeout boundaries.
+The pinned suite reported 1,183 passed, 106 controlled skips, and zero failures.
 
-The negative results cost the most to learn, so we keep them. An ML gate to resolve hedges scored −4 out-of-fold and produced 32 false approvals: the information it needed is missing on exactly the cases that hedge. Opening the approval gate for flags-missing-but-otherwise-clean cases measured **+90 raw EV and we rejected it anyway**, because it manufactures 19 systematic false approvals and the EV matrix is not the whole objective. A from-scratch 2.6M-parameter OCR-correction transducer beat fuzzy snapping decisively at pair level, then gained +0.04 on dev and −0.05 on the sealed holdout, so under its pre-registered gate it ships disabled; joint decoding over the name grammar in plain rapidfuzz shipped instead, fixing 54% of garbled names against 30% for per-token snapping at no model cost.
-
-## Robustness
-
-We authored a red-team corpus of every injection vector the specification names but the public PDFs omit — QR instructions, under-image text, hidden OCG layers, render-mode-3, microtext, hidden-only field values — each paired with a clean twin; the suite proves every trap produces output identical to its twin, with one deliberate exception in the safe direction: a hidden answer key that itself claims APPROVED demotes an otherwise-approved case to NEEDS_REVIEW (`MIB_ANTI_ORACLE_GUARD`, enabled in the shipped container), because the planted key's verdict is wrong in all 216 labeled occurrences and agreement with it marks a trap — zero fires on the 1,000 training cases. Building the corpus closed two real gaps. We never decode barcodes, so there is no decode path to attack. Perturbation testing exposed a rotation cliff, where a rotated page OCRs into confident garbage that passes any line-count gate; anchoring on form content rather than upright wrapper material brought 180° to −2.3 and 90° to −9.9, with false approvals at zero under every degradation. A SIGALRM deadline plus a parent heartbeat watchdog survive a hang below the Python signal layer, and predictions are flushed atomically every five minutes, so even a hard stop leaves a complete submission. A third layer watches the batch itself: the supervisor projects the batch finish from completion pace and, only if slow evaluation hardware would breach the batch time limit, sheds the least valuable OCR work from not-yet-started cases — native-scan page budgets first (measured cost on the full training set: 0.024 points, zero decision changes), then the native second view (0.049 points, zero decision changes) — recovering as the projection improves. On hardware inside the budget it never engages and output is byte-identical to an ungoverned run (verified on the full training set); under a 2× CPU-throttled container it engages early, completes with the retry pass recovering every timeout, and repeat runs agree on 198/200 rows with the differences confined to timeout-boundary cases in the deepest starvation regime — the regime that replaces a batch kill.
-
-## Runtime and contract compliance
-
-Runtime, measured inside the scoring container under the exact contract flags — and re-verified at the submission commit on the image built from a clean clone of the public repository: **3.43 s/PDF** against the 6 s budget, projecting to **~17,100 s (4.8 h)** against the 30,000 s cap, **0.27 GiB** image against 4 GiB, 12 MB of model artifacts against 1 GiB, **3.3 GiB** peak RSS against 8 GiB. Both time margins are 1.75×. The four workers saturate the 4-vCPU quota (measured 400% CPU), and container rows are byte-identical to the submitted rows on every packet checked. The slowest packet takes **62.7 s inside the container**, which is why the per-case deadline is 120 s rather than the 60 s a host-only measurement would have justified (the production 5,000-packet validation run itself came in faster still: 4 h 04 m wall, slowest packet 57.0 s, zero timeouts, zero governor engagements). These are Apple-silicon measurements; per-core speed of the evaluation hardware is unknown, so the batch governor above holds the run inside the 6 s/PDF budget by construction on slower machines, trading a measured, bounded tail-quality cost for the batch-kill it replaces. Extraction is bit-deterministic: two runs under the same conditions are byte-identical (verified under the scoring flags and under a 2× CPU throttle), and at any fixed governor level output is identical across platforms and batch sizes. 1,100 tests; no torch, no LLM or VLM — the runtime contains nothing that follows instructions, so the injection surface this dataset targets does not exist in it. Licenses and per-artifact provenance are in `NOTICE.md`.
-
-## Failure modes
-
-**One dev false approval remains, MIB-000865, and we can prove it irreducible rather than assert it.** The intake scan prints `Visa Class: XW-2` in clean pixels at 0.992 confidence; the truth is TRANSIT-7. We audited every channel the true value could occupy — text layer, native-resolution OCR, hidden and off-crop text, annotations, optional-content groups, embedded files, cross-field consistency, and a near-white band stretch that exposes washed artifacts — and it is absent from all of them. A control packet closes the loop: the same wash reveal on a truth-approved case exposes a washed SAMPLE DENIAL watermark, so the generator plants wash artifacts in the *opposite* direction on approvals, and "find the washed clue" is itself a trap. Approval-side visa corroboration would hedge 26 approvals, 25 of them correct, to stop this one — 25:1 against a 1:1 breakeven. We document the tax rather than distort the policy around it.
-
-The larger residual is structural absence, and it is not a failure. In the biggest hedge slice, 110 of 122 packets contain no flags evidence anywhere — no biometric slip, no flags line on any page, provable from the text layer on digital packets. The generator withholds decisive evidence and randomizes the truth behind it, so NEEDS_REVIEW is the *designed* correct adjudication — the organizers confirmed exactly this on such packets (challenge issue #5: "These examples are under-determined and NEEDS_REVIEW is the correct output"): a human officer holding that packet would escalate it. Converting those cases means betting on generator priors instead of reading. We measured the bets — approving all fee-unread-only cases is +0.94 dev at two or three systematic false approvals — and declined them, leaving the mechanisms behind default-off flags because that trade-off belongs to a human.
+Under the official 4-vCPU, 8-GiB, no-network contract, the final native-ARM64 run
+completed 5,000 packets in **19,186.18 seconds**
+(**3.8372 seconds/PDF**) with **82 fresh-process retries, all recovered**
+(81 watchdog exits with missing primary state and one primary per-case timeout),
+zero terminal failures, governor level 0 throughout, and no batch-deadline backfill, from source
+`4313d28b34abc4cef4c89586060f4d3d34848c88`; full source/runtime manifest
+binding passed. On an eight-case OCR-sensitive panel, adjudications matched
+across architectures; fields differed on all eight. Two emulated AMD64 cases
+also exhausted timeout and retry, producing conservative fallbacks. The ARM64
+fee-reader panel was unchanged from the prior producer. No full AMD64 throughput
+or row-identity claim is made. The AMD64
+image is 316,434,546 bytes
+(`sha256:f6447a9720c0ca52616d83f245ecb804d418b94bd503f8fe57fe551a3e36f95d`);
+ARM64 is 286,493,358 bytes
+(`sha256:21515e59b31fecaed2eb9983527c0751079abc9c9d3c7711142214c523bdae3f`).
+Models total 28,750,436 bytes; the largest is 10,857,958 bytes.
 
 ## With another week
 
-A Reason-line ROI extension of the note reader for rasterized adjudicator notes — a final printability census found exactly four train packets whose legible "Review-only risk flag present: <flag>" line we skip, a measured +0.13 extraction points with zero classification effect, declined this close to submission because the regression surface of touching the reader stack outweighs the yield; a learned faint-ink restoration channel for the small class of notes whose mid-grey ink is human-readable but below any machine channel's SNR, held to the same 100%-precision gates; per-field confidence outputs; extending the CTC-glyph second view — the discriminator that made the flag and world readers shippable where template correlation alone aliases — to more closed-vocabulary fields; and a corpus-scale precision census of the deny-direction readers over the unlabeled validation set as private-shift insurance.
+I would test rasterized “Reason” lines and faint-ink restoration; expose
+per-field confidence; and reproduce on native x86 hardware. Each change would
+face held-out, zero-new-false-approval promotion gates.
 
-## A note on the author
+## Author note
 
-I'm a practicing surgeon, not a coder, and I don't understand this codebase at the line level. This entry was my experiment in what agentic coding can do: my contribution was direction — prompting the AI to hunt for the traps hidden in the packets, to research established document-reading and computer-vision techniques rather than invent its own, and to measure every idea against held-out data before keeping it. The engineering is the AI's; the skepticism and the decisions were mine.
+I am a practicing surgeon, not a software engineer, and I am not seeking a job
+through this challenge. I directed the work through agentic AI, which wrote
+nearly all of the code. I evaluated it through behavioral tests, artifacts, and
+failure analysis rather than claiming conventional line-by-line authorship. I
+set the objective and threat model, chose what could count as evidence, defined
+the promotion gates, directed the failure analyses, and made the final calls
+about which measured gains were too unsafe or brittle to ship. The AI produced
+the implementation; I own the experimental design, skepticism, trade-offs, and
+submission decisions. That division of labour is part of the experiment, and I
+would rather disclose it plainly than imply conventional authorship.
