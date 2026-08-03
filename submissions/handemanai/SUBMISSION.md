@@ -113,8 +113,12 @@ recorded in the source repository's
 [`NOTICE.md`](https://github.com/handemanai/mib-doc-challenge-solution/blob/4313d28b34abc4cef4c89586060f4d3d34848c88/NOTICE.md).
 
 I am a practicing surgeon, not a software engineer, and I am not seeking a job
-through this challenge. I directed the work through agentic AI, which wrote
-nearly all of the code. I set the objective, evidence rules, safety gates, and
-experiment boundaries, directed the failure analyses, and made the final
-submission decisions. `MEMO.md` explains the system, its remaining failure
-boundary, and what I would do with another week.
+through this challenge. My role was to direct the agents. I set the priorities,
+asked them to research unfamiliar questions, required repeated skeptical
+reviews, and spent a great deal of time pushing them to look for hidden
+evidence, document traps, unsafe approvals, and brittle improvements. I asked
+questions, challenged conclusions, and decided what evidence was strong enough
+to act on. The agents did nearly all of the implementation, testing, analysis,
+and drafting. I made the final decisions about what to ship and what to reject.
+`MEMO.md` explains the system, its remaining failure boundary, and what I would
+do with another week.

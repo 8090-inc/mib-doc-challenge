@@ -114,10 +114,11 @@ before replacing this release.
 ## Author note
 
 I am a practicing surgeon, not a software engineer, and I am not seeking a job
-through this challenge. I directed the work through agentic AI, which wrote
-nearly all of the code. I set the objective and threat model, decided what could
-count as evidence, defined the promotion gates, directed the failure analyses,
-and made the final calls about which measured gains were too unsafe or brittle
-to ship. I own the experimental design, skepticism, trade-offs, and submission
-decisions; the AI produced the implementation. I am stating that division
-plainly so the work can be judged for what it is.
+through this challenge. My role was to direct the agents. I set the priorities,
+asked them to research unfamiliar questions, required repeated skeptical
+reviews, and spent a great deal of time pushing them to look for hidden
+evidence, document traps, unsafe approvals, and brittle improvements. I asked
+questions, challenged conclusions, and decided what evidence was strong enough
+to act on. The agents did nearly all of the implementation, testing, analysis,
+and drafting. I made the final decisions about what to ship and what to reject.
+I am stating that division plainly so the work can be judged for what it is.
