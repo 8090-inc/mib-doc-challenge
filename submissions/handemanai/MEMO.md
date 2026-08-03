@@ -113,12 +113,11 @@ before replacing this release.
 
 ## Author note
 
-I am a practicing surgeon, not a software engineer, and I am not seeking a job
-through this challenge. My role was to direct the agents. I set the priorities,
-asked them to research unfamiliar questions, required repeated skeptical
-reviews, and spent a great deal of time pushing them to look for hidden
-evidence, document traps, unsafe approvals, and brittle improvements. I asked
-questions, challenged conclusions, and decided what evidence was strong enough
-to act on. The agents did nearly all of the implementation, testing, analysis,
-and drafting. I made the final decisions about what to ship and what to reject.
-I am stating that division plainly so the work can be judged for what it is.
+I am a practicing surgeon, not a software engineer. I participated in this
+challenge to test the capabilities of agentic coding. I directed the agents by
+setting the priorities, asking them to research unfamiliar questions, requiring
+repeated skeptical reviews, and spending a great deal of time pushing them to
+look for hidden evidence, document traps, unsafe approvals, and brittle
+improvements. I asked questions, challenged conclusions, and decided what
+evidence was strong enough to act on. The agents did all of the implementation,
+testing, analysis, and drafting.
