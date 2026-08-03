@@ -51,6 +51,19 @@ The asymmetric penalty on a false approval makes NEEDS_REVIEW the correct hedge
 more often than intuition suggests. Reported confidence is the probability of
 the chosen action.
 
+A fourth choice follows from a clause the public labels cannot exercise. The
+evaluator removes a field from a case's extraction maximum when the visible
+evidence for it was destroyed, or when it survives only in untrusted hidden
+text. The public label file omits that column, so a public score pays for those
+fields while a scoring pass holding the column does not. That makes the shape of
+the residual matter more than its size. Of the field values this pipeline gets
+wrong, two are recoverable from legitimate visible text; every other one is
+absent from the document entirely or present only inside a planted key. The
+extraction residual is therefore almost wholly composed of fields that are not
+scorable when the column is present, and on the fields that remain scorable the
+pipeline is wrong twice. That is the reason no further effort was spent on
+raising transcription coverage over destroyed regions.
+
 ## Evidence extraction
 
 PDF processing starts with PyMuPDF span extraction. Every observation records
@@ -165,6 +178,19 @@ commands; their presence is recorded as a document-quality signal and their
 contents are quarantined. The separation survives OCR, since rendering a page
 does not make hidden text visible and instructional payloads remain excluded by
 source rules.
+
+The planted keys are not merely untrustworthy, they are inverted, and that is
+measurable rather than assumed. Across every training packet whose hidden key
+states an adjudication, the stated adjudication disagrees with the truth in all
+of them, and in most it claims an approval where the truth is a denial. A system
+that transcribes those keys does not simply gain nothing. It inherits a false
+approval on each one, which is the single most expensive error the payoff matrix
+defines. The field values in those keys are more tempting, because they do agree
+with the truth on the public split, but they name exactly the fields whose
+visible evidence was destroyed, which is the set the extraction maximum drops
+when the unrecoverable column is present. Reading the keys is therefore worth
+close to nothing on a held-out split and carries a false-approval pattern with
+it.
 
 ## Adjudication
 
