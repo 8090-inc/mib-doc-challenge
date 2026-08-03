@@ -116,6 +116,6 @@ before replacing this release.
 I am a practicing surgeon, not a software engineer. I participated in this
 challenge to test the capabilities of agentic coding. I spent much of my time
 doing what comes naturally to me as a surgeon: staying curious, remaining
-skeptical, and double-checking the work. Beyond that, I tried to stay out of the
-agents' way and let them work. They did all of the implementation, testing,
-analysis, and drafting.
+skeptical, and pushing the agents to review and re-review their own work. Beyond
+that, I tried to stay out of the agents' way and let them work. They did all of
+the implementation, testing, analysis, and drafting.
