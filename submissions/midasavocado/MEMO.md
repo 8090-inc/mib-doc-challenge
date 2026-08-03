@@ -1,228 +1,127 @@
-# MIB Doc Challenge — Technical Memo
+# MIB Doc Challenge — Engineering Roadmap
 
 **Submission:** midasavocado
 **Solution:** <https://github.com/midasavocado/mib-doc-challenge-solution>
 
-## Executive summary
+This memo records how the system evolved, which shortcuts were rejected, what
+the frozen candidate actually proves, and where the next week of engineering
+should go. Runtime instructions and the component catalogue live in the public
+repository's README.
 
-This submission is an offline, CPU-only PDF evidence pipeline. It renders every
-page, binds observations to the active case, reconciles fields by source
-authority, and emits one schema-valid JSON object per packet. Classification is
-fail-closed: a signed finding or positive denial witness can decide directly;
-ordinary approval requires affirmative, source-bound support; unresolved
-conflict remains `NEEDS_REVIEW`.
+```mermaid
+flowchart LR
+    A["OCR baseline"] --> B["Source-bound evidence"]
+    B --> C["Clean-room policy"]
+    C --> D["800 / 200 gate"]
+    D --> E["Bounded dual engine"]
+    E --> F["Frozen 1,000 + 5,000 runs"]
+    F --> G["Cross-fit and robustness work"]
+```
 
-The release uses two classifiers. Engine A is the primary generalized evidence
-engine: its policy core is pixel-visible, with separately flagged untrusted
-channels disclosed below. Engine B is a separately feature-flagged model fit
-to the 1,000 public training packets. Engine B is enabled by default, but the
-arbiter is intentionally conservative: B may resolve an Engine-A review only
-when it agrees with Engine A's independent pre-safety lean and no hard evidence
-veto applies. Engine-A denials and authenticated approvals always win; an
-unsigned Engine-A approval contradicted by an Engine-B denial falls back to
-`NEEDS_REVIEW`, never to Engine B's denial.
+## 1. From strings to evidence
+
+The initial extractor recovered many correct-looking values but flattened how
+they were obtained. A clean intake row, incidental policy prose, an OCR guess,
+and a foreign-case page could become the same string. Classification therefore
+sent many true approvals and denials to review: the emitted value looked
+complete, while its authority had been lost.
+
+The first durable change was to bind every observation to the active case,
+physical page type, labeled row, source program, and legibility state. Narrow
+rotation, deskew, faded-ink, and high-resolution readers improved extraction.
+More importantly, they distinguished observed, unreadable, absent, and
+contradictory evidence. Late field repair moved behind a frozen decision
+boundary so prettier output could not silently become policy authority.
+
+## 2. Clean-room policy rebuild
+
+An earlier participant-derived provenance package was removed. The active
+evidence audit, terminal policy, bridge, and writer were authored locally from
+the organizer's PDFs, schema, field manual, and evaluator. Engine A now follows
+a stable precedence: authenticated active-case finding; positive visible
+denial witness; material conflict or uncertainty; affirmative multisource
+approval; otherwise `NEEDS_REVIEW`.
+
+This phase also exposed seductive public residuals: name fragments, exact
+sponsors, tiny conjunctions, and hidden answer-like text could separate cases
+almost perfectly. Case-specific rules and failed trained models were deleted.
+The primary engine retained broad source topology, program authority, and
+symmetric safety vetoes instead.
+
+## 3. Generalization gate
+
+Development used a deterministic 800-packet partition. A separate 200-packet
+boundary returned aggregate section scores, validity counts, and catastrophic
+false-approval count only; it was not used for per-case diagnosis. The boundary
+is disclosed as repeatedly queried aggregate validation, not a pristine
+scientific holdout.
+
+A full-fit classifier looked excellent on its fitting rows but produced only
+72.20/80 classification and seven catastrophic false approvals in five
+internal 640/160 audits. Text, graph, neural, and residual-cell experiments
+were likewise rejected when they failed folds, encoded identity-like cells, or
+created approval without affirmative authority. The promoted Engine-A safety
+anchor measured 138.2286/150 on development and 135.1749/150 on aggregate
+validation, both with zero catastrophic false approvals.
+
+## 4. Bounded dual engine
+
+Engine B is a separately feature-flagged second opinion fit to all 1,000 public
+training labels. It contains two locally generated CatBoost heads and public
+residual policy hypotheses, but no case-ID answer map, validation labels, or
+manual output rows. It is explicitly benchmark-adaptive; private transfer is
+unproven.
+
+The first bridge allowed B to resolve every Engine-A review and replayed at
+146.5924/150 on the public artifact. That was a useful ceiling, not transfer
+evidence. The frozen arbiter is more conservative:
+
+- an Engine-A denial or authenticated approval always wins;
+- a decisive B result may resolve only an Engine-A review, after common fee,
+  risk, medical, conflict, and authority vetoes;
+- B abstention may demote an unsigned approval only in repeated identity-free
+  review families; and
+- after extraction freezes, a cache-backed refresh examines only materially
+  incomplete unsigned approvals. A refreshed B denial can produce review,
+  never denial or approval.
+
+Bridge confidence is not fixed at 0.90. A and B share inputs, so their signals
+are correlated. The arbiter discounts that correlation, combines A
+reliability, B strength, and evidence completeness, subtracts an approval-risk
+margin, and bounds bridge confidence between 0.62 and 0.93.
 
 ![Conservative dual-engine architecture](https://raw.githubusercontent.com/midasavocado/mib-doc-challenge-solution/main/docs/assets/dual-engine-architecture.svg)
 
-## Pipeline
+## 5. Frozen release evidence
 
-The primary pass rasterizes pages with Poppler and reads them with Tesseract.
-Uncertain regions receive bounded rotation, deskew, faded-ink, and
-high-resolution retries. A second locally authored evidence audit uses
-RapidOCR on targeted pages. The two reads do not vote by string count. Each
-candidate retains page type, active-case binding, label support, and source
-provenance, so an intake row can outrank incidental policy prose and a foreign
-case page cannot contaminate the active record.
-
-Evidence is represented as state as well as value:
-
-- observed, unreadable, absent, or contradictory;
-- active-case versus foreign-case;
-- labeled row versus incidental occurrence;
-- one physical source versus multisource corroboration;
-- signed finding, intake, biometric, sponsor, registry, fee, or unknown page.
-
-This distinction explains much of the public corpus. Two packets can emit the
-same apparent fields while having different adjudication support: one may have
-a clean risk row and fee source, while the other has only inferred values or an
-unreadable attachment.
-
-After adjudication is frozen, extraction-only reconciliation may denoise
-unresolved fields. Those late repairs cannot create a policy premise or change
-the verdict.
-
-## Classification
-
-Engine A applies this precedence:
-
-1. authenticated visible finding;
-2. positive, active-case denial witness;
-3. material conflict or explicit uncertainty fence;
-4. affirmative multisource approval quorum;
-5. `NEEDS_REVIEW`.
-
-The final safety pass checks fee authority, arrival support, risk clearance,
-MED-3 biometric requirements, unknown pages, and program-authority conflicts.
-Signed findings remain highest authority. False approval prevention is
-structural: a public-fit model cannot override an Engine-A denial, and every
-bridged approval is still subject to the common hard vetoes.
-
-Engine B is not presented as a generalization result. It uses public-label
-correlations including document topology, low-cardinality field cells, name
-shape, sponsor-number shape, and two locally trained CatBoost model exports.
-It contains no case-ID answer map, filename lookup, validation predictions, or
-manual row edits. At runtime it receives extracted fields, starts from
-abstention, and produces an independent second opinion.
-
-The arbiter accepts a bridge only when:
-
-- Engine A's final result is `NEEDS_REVIEW`;
-- Engine A had a decisive pre-safety lean;
-- Engine B independently chooses the same direction;
-- approval concerns only unsupported arrival or fee-source evidence;
-- the record is otherwise complete, fee-authorized, risk-clean, and
-  conflict-free; and
-- no signed conflict, visible risk, medical-clearance failure, unknown fee, or
-  authority mismatch is present.
-
-Late pixel-visible review flags, blank active-case arrival cells, and
-incomplete transit packets set a hard-review marker. That marker outranks an
-older soft-gap state and cannot be bridged.
-
-A bridged result receives confidence 0.90. A contradictory Engine-B denial may
-veto an unsigned Engine-A approval only to `NEEDS_REVIEW`; it cannot override
-an authenticated 0.99 Engine-A finding or create a denial. Otherwise the
-Engine-A decision and confidence are preserved byte for byte. The whole branch
-is removed with `MIB_BENCHMARK_FIT_CLASSIFIER=0`.
-
-## Trust boundary and hidden text
-
-![Evidence trust boundaries](https://raw.githubusercontent.com/midasavocado/mib-doc-challenge-solution/main/docs/assets/trust-boundaries.svg)
-
-The native PDF text layer is untrusted. It contains fake instructions and
-answer-key-like tuples that may be useful as noisy OCR hypotheses but are not
-document authority. The release has separately ablatable channels for
-pixel-corroborated field denoising, final unresolved-field projection, and an
-isolated negative-polarity generator signal. Visible supported values always
-win; authenticated findings cannot be overwritten; field projection runs after
-the decision boundary.
-
-This is a disclosed benchmark tradeoff. Native text may change or disappear on
-private packets, and private/admin labels may remove hidden-only fields from
-the extraction denominator. The `visible_evidence_only` profile disables these
-channels and Engine B together.
-
-## Confidence
-
-Confidence is assigned after the verdict is frozen. Engine A uses
-provenance-strength bins followed by an identity-free monotone mapping selected
-inside the development partition. It cannot use case ID, applicant name,
-sponsor identity, exact date, or an output answer table. Engine B does not
-replace this mapping globally: only an accepted bridge receives the explicit
-0.90 tie-break confidence.
-
-The evaluator's calibration term is Brier-based, so blanket 0.99 confidence is
-unsafe even when it boosts a public replay. The conservative release therefore
-removed the previous bridge behavior that set every combined-mode row to 0.99.
-
-## Evaluation
-
-The generalized work used a deterministic 800-case development partition and
-an aggregate-only 200-case boundary. Manual inspection, model fitting, and rule
-discovery were confined to the 800. The 200 exposed aggregate section scores
-and catastrophic-false-approval count only; its PDFs, predictions, row errors,
-traces, and confusion cells were not used for tuning.
-
-| Candidate / boundary | Extraction | Classification | Calibration | Total | CFA |
+| Boundary | Extraction | Classification | Calibration | Total | CFA |
 |---|---:|---:|---:|---:|---:|
-| Conservative default, public 1,000 candidate replay | 46.9478 | 73.4800 | 17.7769 | **138.2047** | 0 |
-| Engine A development 800 | 46.9028 | 73.4500 | 17.8758 | **138.2286** | 0 |
+| Exact constrained public 1,000 | 46.9478 | 76.9800 | 18.3819 | **142.3097** | 0 |
+| Generalized Engine A, development 800 | 46.9028 | 73.4500 | 17.8758 | **138.2286** | 0 |
 | Aggregate-only 200 | 46.7389 | 71.5000 | 16.9360 | **135.1749** | 0 |
-| Superseded aggressive bridge, public artifact replay | 46.6956 | 79.9400 | 19.9568 | **146.5924** | 0 |
 
-The 146.5924 row is deliberately labeled historical. It applied an aggressive
-B-resolves-any-review arbiter to a saved 1,000-row Engine-A artifact. It was not
-a fresh run and it is not the current source's score. The conservative bridge
-was adopted because Engine B's opaque validation behavior was materially lower
-than its public fit; public leaderboard cosmetics are not evidence authority.
+The exact 1,000 run completed in 3,624.11 seconds (3.62411 seconds/PDF)
+under the organizer's offline 4-vCPU/8-GiB contract. The identical
+217,919,202-byte ARM64 image then processed all 5,000 unlabeled validation
+packets in 19,717.37 seconds (3.943474 seconds/PDF). The output contains 5,000
+unique complete rows, exactly matches the manifest, and passes both the
+organizer validator and an independent schema audit. Artifact SHA-256:
+`85ca045b1a5a652d6cc9d041966bee05cba17fc75675ef3be10ecccbb517b536`.
+No validation labels or private score were available.
 
-The exact constrained runner processed the public 1,000 in 3,546 seconds
-(3.546 seconds/PDF total), with 1,000/1,000 valid rows. That run exposed two
-catastrophic false approvals. One final repaired home-world value bypassed the
-earlier embargo check; the other was an unsigned A approval contradicted by a B
-denial. The release re-applies the existing embargo invariant after extraction
-freeze and converts the latter disagreement only to review. Exact constrained
-controls confirmed both transitions. Because those broad predicates affect
-only two public output rows, the table reports their deterministic replay over
-the full artifact rather than pretending a second full Docker run occurred.
-The image is 217,916,620 bytes (0.20 GiB). These are public runtime and score
-checks, not validation/private-score evidence.
+## Next week
 
-The frozen image subsequently completed the full 5,000-packet validation
-directory under the same organizer controls. It emitted 5,000 unique,
-schema-valid rows with zero missing or extra IDs. Container start to final
-artifact emission took 17,682.5 seconds, or **3.5365 seconds/PDF total**. The
-organizer validator passed against `data/validation_manifest.csv`; the
-1,754,045-byte artifact SHA-256 is
-`64c39e664ad3990f969ef18bb8fd3245d5238375c9098fce9ce30752ce703dc2`.
-No private labels or validation score were available or inferred.
+1. Replace public-fit Engine B with identity-free, source-state heads trained
+   and calibrated inside nested folds.
+2. Learn agreement, disagreement, and abstention confidence jointly rather
+   than calibrating a moving routing stack.
+3. Fuse the Tesseract and RapidOCR schedulers around one immutable raster cache
+   while retaining selective audit.
+4. Replace submission-wide vocabulary repair with a fixed development-derived
+   vocabulary so singleton and batch behavior are identical.
+5. Generate unseen layout and damage controls; require zero-CFA transfer before
+   granting any broader approval authority.
 
-## Runtime and reproducibility
-
-The Docker image accepts exactly:
-
-```text
-<input_pdf_dir> <output_predictions_path>
-```
-
-It runs without network access, API keys, cloud OCR, LLMs, VLMs, or external
-services. Python wheels are pinned by version and SHA-256 in
-`requirements.lock` and installed with `--require-hashes --no-deps`. Poppler
-and Tesseract are installed at build time. BLAS/OpenMP thread counts are capped
-so four packet workers do not oversubscribe the organizer's four CPUs.
-
-The organizer source was fetched again on August 2. Its core remains commit
-`38ce8883`; the rules, evaluator, schema, Docker runner, 6-second/PDF limit,
-4-GiB image limit, and model-size limits are unchanged.
-
-## Failure modes
-
-- Engine B is deliberately public-fit and may not transfer to new layouts or
-  distributions. The conservative arbiter reduces, but cannot prove away,
-  that risk.
-- Some Engine-A synthetic program hypotheses have small public cohorts.
-  They are feature-flagged and paired with independent evidence vetoes.
-- Hidden native values are noisy and may not exist on private data.
-- Damaged biometrics and genuinely removed fields remain the largest honest
-  extraction ceiling.
-- Batch vocabulary repair is deterministic but can depend on the composition
-  of the input directory.
-- The aggregate-only 200 has been queried more than once and is not described
-  as a pristine scientific holdout.
-
-## Authorship and licensing
-
-The active primary pipeline, evidence audit, terminal rules, bridge, and
-documentation were written locally against the organizer's public field manual,
-PDFs, schema, and evaluator. No participant PR or participant challenge
-implementation is included in the current tree or Docker image. Engine B's
-generated model heads come from this repository's own history and were trained
-locally on public labels.
-
-Open-source notices are retained under `third_party_licenses/`. That directory
-covers CatBoost Apache-2.0, RapidOCR and PaddleOCR model provenance, plus the
-licenses and notices shipped by the pinned runtime wheels.
-
-## With another week
-
-1. Replace Engine B's public-fit cells with nested cross-fit, source-only
-   features and a second untouched private-style packet generator.
-2. Train calibration jointly with the final classifier rather than calibrating
-   a moving routing stack.
-3. Add region-local biometric restoration that can prove legibility without
-   expanding whole-page OCR cost.
-4. Remove batch-dependent field imputation by learning a fixed vocabulary only
-   from the declared public training partition.
-5. Fuse the primary and audit schedulers around one shared raster while keeping
-   the selective audit gate; auditing every packet is slower than the current
-   201-packet skip.
+The main lesson is gloriously unglamorous: durable gains came from preserving
+evidence provenance. Spectacular shortcuts usually melted when shown a held
+fold.
