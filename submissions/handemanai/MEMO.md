@@ -1,13 +1,12 @@
 # MIB Doc Challenge — Technical Memo
 
 I am a practicing surgeon, not a software engineer. I entered this challenge to
-test a narrow thesis: **Could I direct coding agents toward a result I was
-willing to be accountable for without being able to read or write the code?**
-My role was to define the objective, question the output, and decide what
-evidence was good enough to trust. Because I could not inspect the implementation
-myself, I judged it by its behavior: held-out performance, adversarial tests,
-documented failures, and a complete 5,000-document run. The agents did all of
-the implementation, testing, analysis, and drafting.
+test a simple question: **Have coding agents advanced far enough that someone
+who cannot read or write code can still produce a competitive result through
+persistence, high standards, and close attention to detail?** My role was to
+keep pushing—to ask skeptical questions, demand repeated review, and refuse to
+accept work that had not been tested. The agents did all of the implementation,
+testing, analysis, and drafting.
 
 ## Results at a glance
 
