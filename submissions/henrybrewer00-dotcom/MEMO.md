@@ -868,19 +868,36 @@ rows whose border is destroyed inherit the last known offset, and each row rolls
 back. Measured by OCR-ing before and after and counting how many of the
 packet's TRUE field values appear in the text:
 
-| | value |
-| --- | ---: |
-| scan pages measured | 18 |
-| truth values found before | 25 |
-| truth values found after | **27** |
-| net | **+2**, no page made worse |
+| estimator | pages | before | after | net |
+| --- | ---: | ---: | ---: | ---: |
+| forward-fill | 18 | 25 | 27 | **+2** |
+| interpolate + smooth | 18 | 25 | 25 | +0 |
+| step-preserving | 18 | 22 | 23 | +1 |
 
-Two packets recovered a field that no recogniser could previously read, and
-1,300-1,500 rows moved on a typical page. Scaled across ~300 scan-bearing
-packets that is roughly +0.3 extraction and, through the 2.1x classification
-multiplier, around +0.9 total. A better estimator does better: glgh reports
-+2.38 with a second rung that cross-correlates cut glyph halves where the
-border itself is destroyed.
+**Read that table as inconclusive, not as +2.** Three runs were made and the
+first is the one quoted everywhere else in this section; running the other two
+is what exposed the problem. The baseline moves between runs -- 25, 25, 22 --
+and it should not, since no repair is applied to it. The cause is that the lab
+picks which page to measure using the estimator itself, so changing the
+estimator changes the page set: MIB-000010 was page 1 then page 3, MIB-000020
+page 1 then page 2. Each run is a valid paired before/after on the pages it
+saw, but the three are not comparable to each other, and pooling them is
+invalid.
+
+What survives is thin. Across all three runs exactly one packet improves
+(MIB-000019, 2 -> 3) and one regresses in the middle run (MIB-000023, 3 -> 2).
+So "+2, no page made worse" was two pages out of eighteen, and the claim that
+nothing regressed was false in a configuration not yet run when it was written.
+The honest statement is that the displacement is real and large -- 28 of 40
+pages, 54 px, 1,300-1,500 rows moved -- while the *recovery* it buys is not
+resolved at n=18. Any projection to +0.3 extraction or +0.9 total is
+unsupported and should be ignored until the page set is fixed independently of
+the estimator and the sample is a few hundred pages.
+
+The one estimator result that is clean is negative: interpolating across
+destroyed rows and median-smoothing took the paired result to +0 on the same
+page set where the forward fill gave +2. Whatever replaces the forward fill
+must preserve discontinuities -- the displacement steps, it does not ramp.
 
 **This explains the four failures above.** A second engine, PP-OCRv5, a trained
 OCR-correction transducer and closed-vocabulary template correlation measured
@@ -894,9 +911,13 @@ anchor rows spread 54 points where the text layer has sd 0.00, and that was
 recorded as "no fixed rectangle can work" rather than "the image is sliced".
 The measurement was right; the inference was not.
 
-Not shipped -- it needs re-extraction of both splits, a retrain and
-revalidation, and it was measured with 18 minutes left. It is the first thing
-to build next, ahead of anything on the modelling side.
+Not shipped, and on this evidence it should not have been. It needs
+re-extraction of both splits, a retrain and revalidation, and it was measured
+with 18 minutes left -- which is also why the first run's number went into this
+memo before the replications that undercut it. The right next step is not to
+build the repair but to fix the measurement: choose the page set from the PDF
+structure rather than from the estimator, run a few hundred pages, and only
+then decide whether the recovery is worth a retrain.
 
 ## 10. What I would do with another week
 
