@@ -100,11 +100,14 @@ and durable checkpoints contained the loss.
 
 Scoring the image as 8090 does — one invocation over all 5,000 PDFs at
 `--cpus 4` with image defaults — is unaffected and sits comfortably inside the
-contract: measured throughput is 3.2 seconds per PDF against the 6-second
-budget, roughly 16,000 seconds against the 30,000-second hard limit.
+contract. Measured cost on validation is 16.7 CPU-seconds per case, so one
+5,000-packet invocation at `--cpus 4` projects to roughly 21,400 seconds, about
+4.3 seconds per PDF: roughly 71% of both the 30,000-second hard limit and the
+6-second-per-PDF budget. (The 1,000-case public-train reference ran at 3.2
+seconds per PDF; validation packets are about a third heavier.)
 
 - Rows: `5000`
-- Runtime seconds: `generated across multiple container runs over disjoint slices, each inside the official per-container contract; measured throughput 3.2 s per PDF on 4 vCPU (single-container 1,000-case reference: 3,200.1 s, so one 5,000-case invocation projects to ~16,000 s against the 30,000 s limit)`
+- Runtime seconds: `generated across multiple container runs over disjoint slices, each inside the official per-container contract; 16.7 CPU-seconds per validation case measured, so one 5,000-case invocation at --cpus 4 projects to ~21,400 s (~4.3 s per PDF), against the 30,000 s limit and 6 s per PDF budget`
 - Prediction bytes: `1,607,204`
 - Prediction SHA-256: `3fb2ff70e4f7937b2db1f78f424177311debdd10e7c199197472fb5a5371fe94`
 - Validator result: `Valid submission records: 5000

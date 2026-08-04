@@ -107,10 +107,17 @@ each only changes a narrow DENIED result to `NEEDS_REVIEW`.
 
 ## Final validation
 
-Measured throughput on 4 vCPU is **3.2 seconds per PDF**, so the 5,000-packet
-validation set projects to roughly 16,000 seconds against the 30,000-second
-hard limit and the 6-second-per-PDF budget. An earlier run on slower hardware
-did exceed the limit; that was the host, not the pipeline.
+Measured cost on the validation set is **16.7 CPU-seconds per case**
+(4,184 CPU-seconds for a completed 250-case chunk). One invocation over all
+5,000 packets at `--cpus 4` therefore projects to roughly **21,400 seconds**,
+about **4.3 seconds per PDF**. That is inside both the 30,000-second hard limit
+and the 6-second-per-PDF budget, at roughly 71% of each.
+
+The 1,000-case public-train reference ran at 3.2 seconds per PDF; validation
+packets are about a third heavier per case, so the train figure is quoted above
+for the train receipt only and should not be extrapolated to validation. An
+earlier run on slower hardware did exceed the limit; that was the host, not the
+pipeline.
 
 `solution.py` partitions its input into bounded chunks run in fresh interpreters
 with no cross-chunk state, so chunk composition cannot change a row. The
@@ -137,7 +144,7 @@ process lifetimes that the signal-139 note above already implicates.
 Final 5,000-packet receipt:
 
 - Rows: `5000`
-- Runtime: `generated across multiple container runs over disjoint slices, each inside the official per-container contract; measured throughput 3.2 s per PDF on 4 vCPU (single-container 1,000-case reference: 3,200.1 s, so one 5,000-case invocation projects to ~16,000 s against the 30,000 s limit)`
+- Runtime: `generated across multiple container runs over disjoint slices, each inside the official per-container contract; 16.7 CPU-seconds per validation case measured, so one 5,000-case invocation at --cpus 4 projects to ~21,400 s (~4.3 s per PDF), against the 30,000 s limit and 6 s per PDF budget`
 - Prediction bytes: `1,607,204`
 - Prediction SHA-256: `3fb2ff70e4f7937b2db1f78f424177311debdd10e7c199197472fb5a5371fe94`
 - Validator (`--require-complete`): `Valid submission records: 5000
