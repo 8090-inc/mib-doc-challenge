@@ -4,7 +4,7 @@
 
 - **Solution repository** (public, contains a `Dockerfile`):
   https://github.com/sapient-sapiens/evidence-ladder
-- **Submission form:** in progress
+- **Submission form:** completed
 - **Memo:** `MEMO.md` in this folder
 - **Predictions:** `predictions.jsonl` in this folder (validation set)
 
@@ -31,7 +31,7 @@ CPU-only, and uses no LLMs, VLMs, cloud OCR, or network services at runtime.
 
 ## Checklist
 
-- [ ] I filled out the submission form linked above
+- [x] I filled out the submission form linked above
 - [x] This PR only adds `submissions/sapient-sapiens/predictions.jsonl`, `MEMO.md`, and `SUBMISSION.md`
 - [x] `predictions.jsonl` passes `scripts/validate_submission.py` against `data/validation_manifest.csv`
 - [x] My solution repository is public and includes a `Dockerfile`
