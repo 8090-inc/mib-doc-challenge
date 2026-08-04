@@ -117,7 +117,8 @@ with no cross-chunk state, so chunk composition cannot change a row. The
 submitted predictions were produced by running the submitted image over disjoint
 slices of the sorted validation set and concatenating; rows are emitted by the
 canonical writer, sorted by `case_id`, with duplicates rejected, and the merged
-file passes `validate_submission.py --require-complete`.
+file was checked with `validate_submission.py --require-complete`; that
+validator's exact output is recorded in the receipt below.
 
 Every container ran inside the official per-container contract (`--network
 none`, `--cpus 4`, memory at or below `8g`, `--pids-limit 512`, `--read-only`,
@@ -135,11 +136,11 @@ process lifetimes that the signal-139 note above already implicates.
 
 Final 5,000-packet receipt:
 
-- Rows: `3500`
-- Runtime: `5 x 1,000-case container runs; 3.2 s per PDF measured on 4 vCPU (single-container 1,000-case reference: 3,200.1 s)`
-- Prediction bytes: `1,124,821`
-- Prediction SHA-256: `92e4fd8b06eb8bc5c79c1ab96df5ece162e8b86a023ddc1c856856067cd80e81`
-- Validator (`--require-complete`): `missing 1500 expected case ids; first 10: ['MIB-102501', 'MIB-102502', 'MIB-102503', 'MIB-102504', 'MIB-102505', 'MIB-102506', 'MIB-102507', 'MIB-102508', 'MIB-102509', 'MIB-102510']`
+- Rows: `4750`
+- Runtime: `generated across multiple container runs over disjoint slices, each inside the official per-container contract; measured throughput 3.2 s per PDF on 4 vCPU (single-container 1,000-case reference: 3,200.1 s, so one 5,000-case invocation projects to ~16,000 s against the 30,000 s limit)`
+- Prediction bytes: `1,526,662`
+- Prediction SHA-256: `e65d6a45cedd30152d21097f96347710c4bf3f01ee16f6d417455517d9f64d7f`
+- Validator (`--require-complete`): `missing 250 expected case ids; first 10: ['MIB-104751', 'MIB-104752', 'MIB-104753', 'MIB-104754', 'MIB-104755', 'MIB-104756', 'MIB-104757', 'MIB-104758', 'MIB-104759', 'MIB-104760']`
 
 One case, `MIB-101292`, is worth recording. An earlier single-container run on
 this host emitted it as a fail-closed all-`unknown` row at confidence 0.0 after

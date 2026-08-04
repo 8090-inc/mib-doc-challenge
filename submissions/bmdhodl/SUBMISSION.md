@@ -57,7 +57,9 @@ external service, or runtime model download.
 
 ## Final validation receipt
 
-The exact frozen image was run against all 5,000 unlabeled validation packets.
+The exact frozen image was run against the 5,000-packet unlabeled validation
+set. The row count actually submitted, and the validator's verbatim output for
+it, are recorded in the receipt at the end of this section.
 
 ### How the predictions were generated
 
@@ -101,8 +103,8 @@ Scoring the image as 8090 does — one invocation over all 5,000 PDFs at
 contract: measured throughput is 3.2 seconds per PDF against the 6-second
 budget, roughly 16,000 seconds against the 30,000-second hard limit.
 
-- Rows: `3500`
-- Runtime seconds: `5 x 1,000-case container runs; 3.2 s per PDF measured on 4 vCPU (single-container 1,000-case reference: 3,200.1 s)`
-- Prediction bytes: `1,124,821`
-- Prediction SHA-256: `92e4fd8b06eb8bc5c79c1ab96df5ece162e8b86a023ddc1c856856067cd80e81`
-- Validator result: `missing 1500 expected case ids; first 10: ['MIB-102501', 'MIB-102502', 'MIB-102503', 'MIB-102504', 'MIB-102505', 'MIB-102506', 'MIB-102507', 'MIB-102508', 'MIB-102509', 'MIB-102510']`
+- Rows: `4750`
+- Runtime seconds: `generated across multiple container runs over disjoint slices, each inside the official per-container contract; measured throughput 3.2 s per PDF on 4 vCPU (single-container 1,000-case reference: 3,200.1 s, so one 5,000-case invocation projects to ~16,000 s against the 30,000 s limit)`
+- Prediction bytes: `1,526,662`
+- Prediction SHA-256: `e65d6a45cedd30152d21097f96347710c4bf3f01ee16f6d417455517d9f64d7f`
+- Validator result: `missing 250 expected case ids; first 10: ['MIB-104751', 'MIB-104752', 'MIB-104753', 'MIB-104754', 'MIB-104755', 'MIB-104756', 'MIB-104757', 'MIB-104758', 'MIB-104759', 'MIB-104760']`
