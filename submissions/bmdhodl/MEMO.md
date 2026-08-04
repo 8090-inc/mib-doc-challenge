@@ -136,11 +136,12 @@ process lifetimes that the signal-139 note above already implicates.
 
 Final 5,000-packet receipt:
 
-- Rows: `4750`
+- Rows: `5000`
 - Runtime: `generated across multiple container runs over disjoint slices, each inside the official per-container contract; measured throughput 3.2 s per PDF on 4 vCPU (single-container 1,000-case reference: 3,200.1 s, so one 5,000-case invocation projects to ~16,000 s against the 30,000 s limit)`
-- Prediction bytes: `1,526,662`
-- Prediction SHA-256: `e65d6a45cedd30152d21097f96347710c4bf3f01ee16f6d417455517d9f64d7f`
-- Validator (`--require-complete`): `missing 250 expected case ids; first 10: ['MIB-104751', 'MIB-104752', 'MIB-104753', 'MIB-104754', 'MIB-104755', 'MIB-104756', 'MIB-104757', 'MIB-104758', 'MIB-104759', 'MIB-104760']`
+- Prediction bytes: `1,607,204`
+- Prediction SHA-256: `3fb2ff70e4f7937b2db1f78f424177311debdd10e7c199197472fb5a5371fe94`
+- Validator (`--require-complete`): `Valid submission records: 5000
+Missing expected case ids: 0`
 
 One case, `MIB-101292`, is worth recording. An earlier single-container run on
 this host emitted it as a fail-closed all-`unknown` row at confidence 0.0 after
