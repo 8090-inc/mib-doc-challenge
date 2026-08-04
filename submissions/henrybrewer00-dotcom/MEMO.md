@@ -853,6 +853,51 @@ at NCC 0.58 against 0.87-0.90 elsewhere, and it measured net -3 / -1. The
 technique helps where we already have partial success and cannot bootstrap
 where we have none.
 
+## 9h. The damage is geometric, and we spent the day on optics
+
+Measured at the very end, and it reframes every negative result above.
+
+Four other entrants report per-row horizontal displacement as the dominant
+scan damage. Checking our own render path: on **28 of 40 scan pages** the rows
+are displaced, with a median p95-p5 spread of **54 pixels**. The page is not
+blurred. It is sliced into rows and slid sideways.
+
+Undoing it is cheap. Every page carries a printed full-width border of constant
+width; per row, the leftmost dark pixel of that border gives the displacement,
+rows whose border is destroyed inherit the last known offset, and each row rolls
+back. Measured by OCR-ing before and after and counting how many of the
+packet's TRUE field values appear in the text:
+
+| | value |
+| --- | ---: |
+| scan pages measured | 18 |
+| truth values found before | 25 |
+| truth values found after | **27** |
+| net | **+2**, no page made worse |
+
+Two packets recovered a field that no recogniser could previously read, and
+1,300-1,500 rows moved on a typical page. Scaled across ~300 scan-bearing
+packets that is roughly +0.3 extraction and, through the 2.1x classification
+multiplier, around +0.9 total. A better estimator does better: glgh reports
++2.38 with a second rung that cross-correlates cut glyph halves where the
+border itself is destroyed.
+
+**This explains the four failures above.** A second engine, PP-OCRv5, a trained
+OCR-correction transducer and closed-vocabulary template correlation measured
+-50, +0.09, -3 and -0.53. Those are not four unrelated dead ends; they are what
+attacking the resolution axis looks like when the damage is geometric. A
+sharper lens cannot reassemble a picture that has been cut into strips, and a
+template cannot correlate against glyphs that have been relocated.
+
+The signal was in hand hours earlier and misread: the scan-geometry probe found
+anchor rows spread 54 points where the text layer has sd 0.00, and that was
+recorded as "no fixed rectangle can work" rather than "the image is sliced".
+The measurement was right; the inference was not.
+
+Not shipped -- it needs re-extraction of both splits, a retrain and
+revalidation, and it was measured with 18 minutes left. It is the first thing
+to build next, ahead of anything on the modelling side.
+
 ## 10. What I would do with another week
 
 1. ~~**Portrait-based species classification.**~~ **Tested and dead.** The
