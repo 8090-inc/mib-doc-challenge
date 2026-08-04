@@ -6,7 +6,7 @@
   https://github.com/sapient-sapiens/evidence-ladder
 - **Submission form:** in progress
 - **Memo:** `MEMO.md` in this folder
-- **Predictions:** `predictions.jsonl` forthcoming (validation set; will land in a follow-up commit)
+- **Predictions:** `predictions.jsonl` in this folder (validation set)
 
 This pull request adds files only under `submissions/sapient-sapiens/`.
 The solution code lives in the linked repository above — it is **not**
@@ -32,8 +32,8 @@ CPU-only, and uses no LLMs, VLMs, cloud OCR, or network services at runtime.
 ## Checklist
 
 - [ ] I filled out the submission form linked above
-- [x] This PR only adds files under `submissions/sapient-sapiens/` (`MEMO.md`, `SUBMISSION.md`; `predictions.jsonl` pending)
-- [ ] `predictions.jsonl` passes `scripts/validate_submission.py` against `data/validation_manifest.csv`
+- [x] This PR only adds `submissions/sapient-sapiens/predictions.jsonl`, `MEMO.md`, and `SUBMISSION.md`
+- [x] `predictions.jsonl` passes `scripts/validate_submission.py` against `data/validation_manifest.csv`
 - [x] My solution repository is public and includes a `Dockerfile`
 - [x] My Docker image runs offline (`--network none`) and accepts `<input_pdf_dir> <output_predictions_path>`
 - [x] My submitted runtime uses no LLMs, VLMs, cloud OCR, or network services
