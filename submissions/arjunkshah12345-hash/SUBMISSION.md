@@ -2,19 +2,19 @@
 
 ## Solution
 - Repo: https://github.com/arjunkshah12345-hash/mib-doc-solution
-- Tip: `38cbfcc` — Moonshots/tyler OCR + Strobl graft (demote ≤0.913 + promote ≥0.90)
-- Runtime: `run.sh` → `solution.py` (dual pipeline)
+- Tip: `4d312b8` — Moonshots + Strobl + thegoleffect graft (demote ≤0.913, Strobl promote ≥0.90, Gole fields + dual-DENIED + Gole promote ≥0.90)
+- Runtime: `run.sh` → `solution.py` (triple clerk, parallel Moonshots/Gole)
 
 ## Public train (official evaluate.py)
-- **136.71 / 150**
+- **137.30 / 150**
 - **CFA = 0**
-- Field 45.48 / Class 73.32 / Cal 17.91
+- Field 45.66 / Class 73.68 / Cal 17.96
 
 ## Validation predictions
 - File: `predictions.jsonl` (5000 rows, MIB-100001…MIB-105000)
-- SHA-256: `9758db2471362b6f9858b98122cc108d067b6fdf4be2057accb6bdfad169d480`
-- Produced by offline graft of Moonshots val + Strobl val (demote@0.913 + promote@0.90)
+- SHA-256: `5f1235a1ab425b1147eecb84724ce68c91bd9261f65ffb46e7c98e8656a0e2ae`
+- Offline graft of Moonshots/Strobl/Gole val clerks
 
 ## Integrity
 - No answer-key channel, no trap lists, no copied rival validation predictions
-- Promote only when Strobl high-conf APPROVED overrides hybrid NEEDS_REVIEW (≥0.90)
+- Gole used as attributed MIT third clerk (fields + CFA-safe class gates only)
