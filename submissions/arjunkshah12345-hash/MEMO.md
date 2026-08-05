@@ -1,42 +1,36 @@
-# Technical Memo — Moonshots + Strobl + Gole graft (private-first)
+# Technical Memo — private-seatbelt triple graft
 
 ## Approach
 
-Triple-clerk graft aimed at private transfer:
+Triple-clerk graft with fail-closed private seatbelts:
 
-1. **Calling Moonshots / tyler OCR** (`mib/`) for field extraction and base
-   adjudication.
-2. **Strobl visible-evidence pipeline** (`mib_pipeline/`) as an independent
-   second opinion.
-3. **thegoleffect** (`clerks/goleffect/`, MIT) as a third clerk for scored
-   fields and CFA-safe class gates.
-4. **VisibleScoreFinalizer** on Moonshots rows → hybrid.
-5. **Graft** (`mib_pipeline/graft.py`):
-   - Demote hybrid `APPROVED` on Strobl `DENIED` (always) or Strobl
-     `NEEDS_REVIEW` with hybrid conf ≤ **0.913**.
-   - Promote hybrid `NEEDS_REVIEW` when Strobl `APPROVED` conf ≥ **0.90**.
-   - Take nonempty Gole scored fields.
-   - If still review and both Strobl+Gole `DENIED` → `DENIED`.
-   - If still review and Gole `APPROVED` conf ≥ **0.90** → `APPROVED`.
+1. **Moonshots / tyler** — fields + base adjudication.
+2. **Strobl** — demote DENIED always / REVIEW ≤0.913; promote APPROVED ≥0.90.
+3. **thegoleffect (MIT)** — `fee_status` only; dual-DENIED demote; promote ≥0.90
+   **only if Strobl is not DENIED**.
 
-Public train (official `evaluate.py`, locked): **137.30 / 150, CFA = 0**
-(field 45.66, class 73.68, cal 17.96).
+Public train (official `evaluate.py`): **137.23 / 150, CFA = 0**
+(field 45.66, class 73.62, cal 17.95).
 
-## Why this vs 142-claim rivals
+## Private seatbelts (why we won't repeat the last bite)
 
-- **#91 speculator19** (142.59 CV / 142.15 holdout) uses a learned referee over
-  three pipelines and reports CFA on holdout. Strong favorite if it transfers;
-  meta-overfit risk remains.
-- **#73 midasavocado** (142.31) turns on public-label Engine B; A-only / frozen
-  holdout reads ~135–138. Soft for private.
-- **#85 bmdhodl** (137.23 CFA=0) is the nearest honest CFA=0 rival — we edge it
-  at 137.30 without label-fit Engine B.
-- Laundry (#52 150, #3 AK, #78 CFA=12) ignored.
+| Risk that bit us / rivals before | What we do now |
+|----------------------------------|----------------|
+| AK / purpose×sig unlocks | Refused |
+| Ungated approve laundry / Gole≥0.85 | Refused (CFA=3 measured) |
+| Blind full Gole field overwrite (211↑/166↓) | Removed — fee only (49↑/9↓) |
+| Gole APPROVED over Strobl DENIED | **Vetoed** (CFA hole closed) |
+| Label-fit Engine B / learned referee | Refused |
+| CFA on train | **0** |
 
-Organic: no AK, no case-ID lists, no copied val preds. Gole is attributed MIT
-and only feeds fields + locked CFA=0 class gates.
+## Competitive read
+
+- #91 ~142 holdout: still public favorite if stack transfers.
+- #73 142 with Engine B: soft if B dies.
+- #85 ~137.23 CFA=0: we match their train band with stricter seatbelts.
+- Laundry ignored.
 
 ## Attribution
 
-Moonshots/tyler (`mib/`); Strobl (`mib_pipeline/`); thegoleffect
-(`clerks/goleffect/`). See `ATTRIBUTION.md` and `third_party_licenses/`.
+Moonshots/tyler; Strobl `mib_pipeline/`; thegoleffect `clerks/goleffect/`.
+See `ATTRIBUTION.md`.
