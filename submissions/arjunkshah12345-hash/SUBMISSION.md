@@ -2,7 +2,7 @@
 
 ## Solution
 - Repo: https://github.com/arjunkshah12345-hash/mib-doc-solution
-- Tip:  — private seatbelt + Gole DENIED veto
+- Tip: `93edcd0` — private seatbelt + Gole DENIED veto
 - Runtime: `run.sh` → `solution.py` (triple clerk; fail-closed graft)
 
 ## Public train (official evaluate.py)
