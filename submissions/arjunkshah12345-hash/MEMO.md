@@ -7,7 +7,8 @@ Triple-clerk graft with fail-closed private seatbelts:
 1. **Moonshots / tyler** — fields + base adjudication.
 2. **Strobl** — demote DENIED always / REVIEW ≤0.913; promote APPROVED ≥0.90.
 3. **thegoleffect (MIT)** — `fee_status` only; dual-DENIED demote; promote ≥0.90
-   **only if Strobl is not DENIED**.
+   **only if Strobl is not DENIED**; DENIED ≥0.90 vetoes keep-APPROVED unless
+   Strobl also APPROVED.
 
 Public train (official `evaluate.py`): **137.23 / 150, CFA = 0**
 (field 45.66, class 73.62, cal 17.95).
@@ -20,6 +21,7 @@ Public train (official `evaluate.py`): **137.23 / 150, CFA = 0**
 | Ungated approve laundry / Gole≥0.85 | Refused (CFA=3 measured) |
 | Blind full Gole field overwrite (211↑/166↓) | Removed — fee only (49↑/9↓) |
 | Gole APPROVED over Strobl DENIED | **Vetoed** (CFA hole closed) |
+| Keep APPROVED when Gole DENIED + Strobl≠AP | **Vetoed** (0 train flips; val insurance) |
 | Label-fit Engine B / learned referee | Refused |
 | CFA on train | **0** |
 
