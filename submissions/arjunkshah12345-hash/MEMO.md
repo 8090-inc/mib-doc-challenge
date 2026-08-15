@@ -9,6 +9,10 @@ Triple-clerk graft with fail-closed private seatbelts:
 3. **thegoleffect (MIT)** — `fee_status` only; dual-DENIED demote; promote ≥0.90
    **only if Strobl is not DENIED**; DENIED ≥0.90 vetoes keep-APPROVED unless
    Strobl also APPROVED.
+4. **Field-manual demote** (`apply_emitted_demote`) after graft — never emit
+   APPROVED with unpaid/unknown fee, barred sponsor, soft-embargo world,
+   TRANSIT-7, or review-only flags. Train-neutral on the locked set; removes
+   clerk-leaked Approvals that are private CFA bombs.
 
 Public train (official `evaluate.py`): **137.23 / 150, CFA = 0**
 (field 45.66, class 73.62, cal 17.95).
@@ -22,15 +26,14 @@ Public train (official `evaluate.py`): **137.23 / 150, CFA = 0**
 | Blind full Gole field overwrite (211↑/166↓) | Removed — fee only (49↑/9↓) |
 | Gole APPROVED over Strobl DENIED | **Vetoed** (CFA hole closed) |
 | Keep APPROVED when Gole DENIED + Strobl≠AP | **Vetoed** (0 train flips; val insurance) |
+| APPROVED with unpaid / unknown / barred / embargo | **Demoted** (field manual; 0 train flips) |
 | Label-fit Engine B / learned referee | Refused |
 | CFA on train | **0** |
 
 ## Competitive read
 
-- #91 ~142 holdout: still public favorite if stack transfers.
-- #73 142 with Engine B: soft if B dies.
-- #85 ~137.23 CFA=0: we match their train band with stricter seatbelts.
-- Laundry ignored.
+- Match ~137 CFA=0 band with stricter seatbelts than laundry stacks.
+- Final rank is Docker on private test — seatbelts over vanity train.
 
 ## Attribution
 

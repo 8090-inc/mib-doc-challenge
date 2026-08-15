@@ -2,7 +2,7 @@
 
 ## Solution
 - Repo: https://github.com/arjunkshah12345-hash/mib-doc-solution
-- Tip: `93edcd0` — private seatbelt + Gole DENIED veto
+- Tip: `9e0cceb` — field-manual demote after graft (private CFA seatbelt)
 - Runtime: `run.sh` → `solution.py` (triple clerk; fail-closed graft)
 
 ## Public train (official evaluate.py)
@@ -12,8 +12,8 @@
 
 ## Validation predictions
 - File: `predictions.jsonl` (5000 rows, MIB-100001…MIB-105000)
-- SHA-256: `ec3829c722e3f5566f93c976dc388d87273066b9d63d659804006187c6d1e296`
-- Rebuild note: re-applied Strobl DENIED-always + Gole DENIED veto (12 adj fixes; train unchanged)
+- SHA-256: `b5fbd0eaa76468a4be0b58d40b76adcb88ec0b6ee3eddeac806e43b58e50f7a2`
+- Rebuild: re-applied field-manual demote (21 Approvals → REVIEW/DENIED; train lock unchanged)
 
 ## Integrity / private seatbelts
 - No answer-key channel, no trap lists, no copied rival validation predictions
@@ -21,3 +21,4 @@
 - Never keep APPROVED when Gole DENIED ≥0.90 and Strobl ≠ APPROVED
 - Gole fields limited to `fee_status` only (no blind full-field overwrite)
 - Dual Strobl+Gole `DENIED` demote only; CFA=0 locked
+- Post-graft field-manual demote (unpaid/unknown fee, barred sponsor, soft embargo, TRANSIT-7, review-only flags)
